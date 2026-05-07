@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ChevronLeft, Save, Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Save, Loader2, ShoppingCart, ArrowLeft } from 'lucide-react';
 import AIKickstart from '../components/features/launchpad/AIKickstart';
 import BusinessForm from '../components/features/launchpad/BusinessForm';
 import ServiceForm from '../components/features/launchpad/ServiceForm';
@@ -74,11 +74,23 @@ const STEP_LABELS = [
   'Review',
 ];
 
+const CHECKOUT_STORAGE_KEY = 'myt_pending_checkout';
+
+type PendingCheckout = { checkoutUrl: string; email: string; businessName: string };
+
 const LaunchpadPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const { discoveryData, themeSelection, userEmail } = useLaunchpadStore();
+  const [pendingCheckout, setPendingCheckout] = useState<PendingCheckout | null>(() => {
+    try {
+      const saved = localStorage.getItem(CHECKOUT_STORAGE_KEY);
+      return saved ? (JSON.parse(saved) as PendingCheckout) : null;
+    } catch {
+      return null;
+    }
+  });
+  const { discoveryData, themeSelection, userEmail, resetDiscovery } = useLaunchpadStore();
   const [formData, setFormData] = useState<LaunchpadFormData>({
     business: {
       businessName: '',
@@ -229,17 +241,39 @@ const LaunchpadPage: React.FC = () => {
   const handleKickstartSubmit = async () => {
     setCheckoutError(null);
     setCheckoutLoading(true);
-    const err = await handleSaaSCheckout({ email: userEmail, discoveryData, themeSelection });
+    const result = await handleSaaSCheckout({ email: userEmail, discoveryData, themeSelection });
     setCheckoutLoading(false);
-    if (err) {
+
+    if ('code' in result) {
       const messages: Record<string, string> = {
         MISSING_EMAIL: 'Please enter a valid email address.',
         MISSING_INDUSTRY: 'Please select an industry category.',
-        NO_CHECKOUT_URL: 'Checkout is not yet configured for your industry. Please contact us.',
+        NO_CHECKOUT_URL: 'Checkout is not yet configured. Please contact us.',
         DB_ERROR: 'Could not save your information. Please try again.',
       };
-      setCheckoutError(messages[err.code] ?? 'An unexpected error occurred.');
+      setCheckoutError(messages[result.code] ?? 'An unexpected error occurred.');
+      return;
     }
+
+    // Save to localStorage so returning users can resume checkout
+    const checkout: PendingCheckout = {
+      checkoutUrl: result.checkoutUrl,
+      email: result.email,
+      businessName: discoveryData.businessName,
+    };
+    localStorage.setItem(CHECKOUT_STORAGE_KEY, JSON.stringify(checkout));
+    setPendingCheckout(checkout);
+  };
+
+  const handleGoToCheckout = (url: string) => {
+    window.location.href = url;
+  };
+
+  const handleStartOver = () => {
+    localStorage.removeItem(CHECKOUT_STORAGE_KEY);
+    setPendingCheckout(null);
+    resetDiscovery();
+    setCurrentStep(1);
   };
 
   const handleSubmit = () => {
@@ -250,6 +284,47 @@ const LaunchpadPage: React.FC = () => {
   const showPreview = currentStep > 1 && currentStep < 8;
   const isLastFormStep = currentStep === 7;
   const isSuccessStep = currentStep === 8;
+
+  // Checkout-ready screen — shown after save or on return visit
+  if (pendingCheckout) {
+    return (
+      <div className="pt-24 pb-16 bg-[#F3F3F3] min-h-screen">
+        <div className="container-custom max-w-2xl">
+          <div className="card shadow-lg text-center py-12 px-8">
+            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-[#4EBCED]/15 mx-auto mb-6">
+              <ShoppingCart size={32} className="text-[#4EBCED]" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">You're one step away!</h2>
+            {pendingCheckout.businessName && (
+              <p className="text-[#464E54] mb-1 font-medium">{pendingCheckout.businessName}</p>
+            )}
+            <p className="text-[#464E54] mb-2">
+              Your discovery answers have been saved. Complete your purchase to launch your site.
+            </p>
+            <p className="text-sm text-muted-foreground mb-8">
+              Returning as <span className="font-medium">{pendingCheckout.email}</span>
+            </p>
+
+            <button
+              onClick={() => handleGoToCheckout(pendingCheckout.checkoutUrl)}
+              className="btn btn-primary w-full text-lg py-4 mb-4 flex items-center justify-center gap-2"
+            >
+              <ShoppingCart size={20} />
+              Complete Your Purchase
+            </button>
+
+            <button
+              onClick={handleStartOver}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-[#4EBCED] mx-auto transition-colors"
+            >
+              <ArrowLeft size={14} />
+              Start over with different answers
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-24 pb-16 bg-[#F3F3F3] min-h-screen">

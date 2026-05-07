@@ -15,13 +15,18 @@ export type CheckoutError =
   | { code: 'NO_CHECKOUT_URL' }
   | { code: 'DB_ERROR'; message: string };
 
+export type CheckoutSuccess = {
+  checkoutUrl: string;
+  email: string;
+};
+
 // ─── Handler ────────────────────────────────────────────────────────────────
 
 export async function handleSaaSCheckout({
   email,
   discoveryData,
   themeSelection,
-}: CheckoutParams): Promise<CheckoutError | null> {
+}: CheckoutParams): Promise<CheckoutError | CheckoutSuccess> {
   // Guard: email required
   if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { code: 'MISSING_EMAIL' };
@@ -33,8 +38,8 @@ export async function handleSaaSCheckout({
   }
 
   // Guard: master checkout URL must be configured
-  const checkoutUrl = import.meta.env.VITE_GHL_MASTER_CHECKOUT_URL as string;
-  if (!checkoutUrl) {
+  const checkoutBase = import.meta.env.VITE_GHL_MASTER_CHECKOUT_URL as string;
+  if (!checkoutBase) {
     return { code: 'NO_CHECKOUT_URL' };
   }
 
@@ -56,11 +61,10 @@ export async function handleSaaSCheckout({
     return { code: 'DB_ERROR', message: error.message };
   }
 
-  // Append email + industry so GHL can pre-fill checkout and route the snapshot
-  const url = new URL(checkoutUrl);
+  // Build the checkout URL with pre-fill params
+  const url = new URL(checkoutBase);
   url.searchParams.set('email', email.trim().toLowerCase());
   url.searchParams.set('industry', discoveryData.industryCategory);
 
-  window.location.href = url.toString();
-  return null;
+  return { checkoutUrl: url.toString(), email: email.trim().toLowerCase() };
 }
