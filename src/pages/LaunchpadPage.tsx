@@ -248,6 +248,7 @@ const LaunchpadPage: React.FC = () => {
       const messages: Record<string, string> = {
         MISSING_EMAIL: 'Please enter a valid email address.',
         MISSING_INDUSTRY: 'Please select an industry category.',
+        MISSING_INDUSTRY_OTHER: 'Please describe your industry.',
         NO_CHECKOUT_URL: 'Checkout is not yet configured. Please contact us.',
         DB_ERROR: 'Could not save your information. Please try again.',
       };

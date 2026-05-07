@@ -12,6 +12,7 @@ export type CheckoutParams = {
 export type CheckoutError =
   | { code: 'MISSING_EMAIL' }
   | { code: 'MISSING_INDUSTRY' }
+  | { code: 'MISSING_INDUSTRY_OTHER' }
   | { code: 'NO_CHECKOUT_URL' }
   | { code: 'DB_ERROR'; message: string };
 
@@ -35,6 +36,11 @@ export async function handleSaaSCheckout({
   // Guard: industry required
   if (!discoveryData.industryCategory) {
     return { code: 'MISSING_INDUSTRY' };
+  }
+
+  // Guard: "Other" must have a description
+  if (discoveryData.industryCategory === 'other' && !discoveryData.industryOther?.trim()) {
+    return { code: 'MISSING_INDUSTRY_OTHER' };
   }
 
   // Guard: master checkout URL must be configured

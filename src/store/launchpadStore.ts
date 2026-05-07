@@ -22,10 +22,12 @@ export type IndustryCategory =
   | 'ecommerce'
   | 'coaching'
   | 'dental'
-  | 'chiropractic';
+  | 'chiropractic'
+  | 'other';
 
 export type DiscoveryData = {
   industryCategory: IndustryCategory | '';
+  industryOther: string;
   businessName: string;
   vision: string;
   hookAndProblem: string;
@@ -46,6 +48,7 @@ type LaunchpadState = {
 
 const defaultDiscovery: DiscoveryData = {
   industryCategory: '',
+  industryOther: '',
   businessName: '',
   vision: '',
   hookAndProblem: '',

@@ -32,6 +32,7 @@ export const INDUSTRY_OPTIONS: { value: IndustryCategory; label: string }[] = [
   { value: 'coaching',       label: 'Coaching & Consulting' },
   { value: 'dental',         label: 'Dental' },
   { value: 'chiropractic',   label: 'Chiropractic' },
+  { value: 'other',          label: 'Other' },
 ];
 
 const THEME_OPTIONS: { value: ThemeSelection; label: string; description: string }[] = [
@@ -178,6 +179,29 @@ const AIKickstart: React.FC = () => {
             <p className="text-xs text-red-500">Please select an industry.</p>
           )}
         </div>
+
+        {/* ── Other industry (conditional) ── */}
+        {discoveryData.industryCategory === 'other' && (
+          <div className="space-y-1.5">
+            <Label htmlFor="industryOther">
+              Describe Your Industry <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="industryOther"
+              value={discoveryData.industryOther}
+              onChange={(e) => handleDiscoveryChange('industryOther', e.target.value)}
+              placeholder="e.g., Software Company, Venture Studio, Recording Label…"
+              className={
+                touched.industryOther && !discoveryData.industryOther.trim()
+                  ? 'border-red-400 focus-visible:ring-red-400'
+                  : ''
+              }
+            />
+            {touched.industryOther && !discoveryData.industryOther.trim() && (
+              <p className="text-xs text-red-500">Please describe your industry.</p>
+            )}
+          </div>
+        )}
 
         {/* ── Email ── */}
         <div className="space-y-1.5">
