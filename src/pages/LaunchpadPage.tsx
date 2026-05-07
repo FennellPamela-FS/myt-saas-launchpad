@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ChevronLeft, Save, Loader2, ShoppingCart, ArrowLeft } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { ChevronRight, ChevronLeft, Save, Loader2, ShoppingCart, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import AIKickstart from '../components/features/launchpad/AIKickstart';
 import BusinessForm from '../components/features/launchpad/BusinessForm';
 import ServiceForm from '../components/features/launchpad/ServiceForm';
@@ -10,6 +11,7 @@ import LaunchpadPreview from '../components/features/launchpad/LaunchpadPreview'
 import ReviewSubmit from '../components/features/launchpad/ReviewSubmit';
 import { useLaunchpadStore } from '../store/launchpadStore';
 import { handleSaaSCheckout } from '../lib/checkout';
+import { handleExistingEnroll } from '../lib/enroll';
 
 // Define types for the form data
 export type BusinessData = {
@@ -79,9 +81,13 @@ const CHECKOUT_STORAGE_KEY = 'myt_pending_checkout';
 type PendingCheckout = { checkoutUrl: string; email: string; businessName: string };
 
 const LaunchpadPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const enrollLocationId = searchParams.get('enroll') ?? null;
+
   const [currentStep, setCurrentStep] = useState(1);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [enrollComplete, setEnrollComplete] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState<PendingCheckout | null>(() => {
     try {
       const saved = localStorage.getItem(CHECKOUT_STORAGE_KEY);
@@ -268,6 +274,35 @@ const LaunchpadPage: React.FC = () => {
     setPendingCheckout(checkout);
   };
 
+  const handleEnrollSubmit = async () => {
+    if (!enrollLocationId) return;
+    setCheckoutError(null);
+    setCheckoutLoading(true);
+    const result = await handleExistingEnroll({
+      email: userEmail,
+      locationId: enrollLocationId,
+      discoveryData,
+      themeSelection,
+    });
+    setCheckoutLoading(false);
+
+    if ('code' in result) {
+      const messages: Record<string, string> = {
+        MISSING_EMAIL: 'Please enter a valid email address.',
+        MISSING_LOCATION_ID: 'Enrollment link is invalid. Please contact support.',
+        MISSING_INDUSTRY: 'Please select an industry category.',
+        MISSING_INDUSTRY_OTHER: 'Please describe your industry.',
+        ALREADY_COMPLETED: 'This account is already active. Contact hello@mytcreative.com for help.',
+        PROVISIONING_IN_PROGRESS: 'Your site is already being set up. Check your email for updates.',
+        DB_ERROR: 'Could not save your information. Please try again.',
+      };
+      setCheckoutError(messages[result.code] ?? 'An unexpected error occurred.');
+      return;
+    }
+
+    setEnrollComplete(true);
+  };
+
   const handleGoToCheckout = (url: string) => {
     window.location.href = url;
   };
@@ -287,6 +322,29 @@ const LaunchpadPage: React.FC = () => {
   const showPreview = currentStep > 1 && currentStep < 8;
   const isLastFormStep = currentStep === 7;
   const isSuccessStep = currentStep === 8;
+
+  // Enrollment confirmation — shown after existing client enroll succeeds
+  if (enrollComplete) {
+    return (
+      <div className="pt-24 pb-16 bg-[#F3F3F3] min-h-screen">
+        <div className="container-custom max-w-2xl">
+          <div className="card shadow-lg text-center py-12 px-8">
+            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mx-auto mb-6">
+              <CheckCircle2 size={32} className="text-green-600" />
+            </div>
+            <h2 className="text-2xl font-bold mb-3">You're in the cohort!</h2>
+            <p className="text-[#464E54] mb-2">
+              Your discovery answers have been saved and your site is now being built.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              We'll email <span className="font-medium">{userEmail}</span> when your site is ready.
+              This usually takes just a few minutes.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Checkout-ready screen — shown after save or on return visit
   if (pendingCheckout) {
@@ -342,6 +400,13 @@ const LaunchpadPage: React.FC = () => {
           </p>
         </div>
 
+        {/* Enrollment mode banner */}
+        {enrollLocationId && (
+          <div className="mb-6 px-4 py-3 rounded-md bg-[#4EBCED]/10 border border-[#4EBCED]/30 text-[#2f718e] text-sm text-center">
+            <span className="font-semibold">Existing Client Enrollment</span> — your account is ready. Complete your discovery answers and we'll build your site automatically.
+          </div>
+        )}
+
         {/* Progress Bar */}
         {!isSuccessStep && (
           <div className="mb-8">
@@ -391,14 +456,19 @@ const LaunchpadPage: React.FC = () => {
 
                   {currentStep === 1 ? (
                     <button
-                      onClick={handleKickstartSubmit}
+                      onClick={enrollLocationId ? handleEnrollSubmit : handleKickstartSubmit}
                       disabled={checkoutLoading}
                       className="btn btn-primary flex items-center disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {checkoutLoading ? (
                         <>
                           <Loader2 size={18} className="mr-2 animate-spin" />
-                          Saving…
+                          {enrollLocationId ? 'Enrolling…' : 'Saving…'}
+                        </>
+                      ) : enrollLocationId ? (
+                        <>
+                          <CheckCircle2 size={18} className="mr-2" />
+                          Enroll My Account
                         </>
                       ) : (
                         <>
