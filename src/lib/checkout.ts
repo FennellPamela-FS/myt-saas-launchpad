@@ -52,6 +52,7 @@ export async function handleSaaSCheckout({
     );
 
   if (error) {
+    console.error('[checkout] Supabase upsert failed:', error.message, error.details, error.hint);
     return { code: 'DB_ERROR', message: error.message };
   }
 
