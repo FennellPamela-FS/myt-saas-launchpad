@@ -196,6 +196,10 @@ Return ONLY a valid JSON object (no markdown, no commentary) with exactly these 
 }`;
 }
 
+function stripMarkdown(text: string): string {
+  return text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+}
+
 async function callClaude(prompt: string): Promise<GeneratedFields> {
   const apiKey = Deno.env.get('CLAUDE_API_KEY');
   if (!apiKey) throw new Error('CLAUDE_API_KEY not set');
@@ -216,7 +220,7 @@ async function callClaude(prompt: string): Promise<GeneratedFields> {
 
   if (!res.ok) throw new Error(`Claude ${res.status}: ${await res.text()}`);
   const json = await res.json();
-  return JSON.parse(json.content?.[0]?.text ?? '{}') as GeneratedFields;
+  return JSON.parse(stripMarkdown(json.content?.[0]?.text ?? '{}')) as GeneratedFields;
 }
 
 async function callGemini(prompt: string): Promise<GeneratedFields> {
@@ -236,7 +240,7 @@ async function callGemini(prompt: string): Promise<GeneratedFields> {
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
   const json = await res.json();
   return JSON.parse(
-    json.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}'
+    stripMarkdown(json.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}')
   ) as GeneratedFields;
 }
 

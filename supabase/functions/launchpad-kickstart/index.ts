@@ -77,6 +77,12 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
 }`;
 }
 
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+function stripMarkdown(text: string): string {
+  return text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+}
+
 // ─── Claude ────────────────────────────────────────────────────────────────
 
 async function callClaude(prompt: string): Promise<GeneratedCopy> {
@@ -103,7 +109,7 @@ async function callClaude(prompt: string): Promise<GeneratedCopy> {
   }
 
   const json = await res.json();
-  const text = json.content?.[0]?.text ?? '';
+  const text = stripMarkdown(json.content?.[0]?.text ?? '');
   const parsed = JSON.parse(text) as Omit<GeneratedCopy, 'provider'>;
   return { ...parsed, provider: 'claude' };
 }
@@ -131,7 +137,7 @@ async function callGemini(prompt: string): Promise<GeneratedCopy> {
   }
 
   const json = await res.json();
-  const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  const text = stripMarkdown(json.candidates?.[0]?.content?.parts?.[0]?.text ?? '');
   const parsed = JSON.parse(text) as Omit<GeneratedCopy, 'provider'>;
   return { ...parsed, provider: 'gemini' };
 }
