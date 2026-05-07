@@ -14,6 +14,8 @@ export type CheckoutError =
   | { code: 'MISSING_INDUSTRY' }
   | { code: 'MISSING_INDUSTRY_OTHER' }
   | { code: 'NO_CHECKOUT_URL' }
+  | { code: 'ALREADY_COMPLETED' }
+  | { code: 'PROVISIONING_IN_PROGRESS' }
   | { code: 'DB_ERROR'; message: string };
 
 export type CheckoutSuccess = {
@@ -49,7 +51,22 @@ export async function handleSaaSCheckout({
     return { code: 'NO_CHECKOUT_URL' };
   }
 
-  // Persist discovery state so the post-payment GHL webhook can provision the snapshot
+  // Check for an existing record before upserting
+  const { data: existing } = await supabase
+    .from('pending_saas_deployments')
+    .select('status')
+    .eq('email', email.trim().toLowerCase())
+    .maybeSingle();
+
+  if (existing?.status === 'completed') {
+    return { code: 'ALREADY_COMPLETED' };
+  }
+
+  if (existing?.status === 'processing') {
+    return { code: 'PROVISIONING_IN_PROGRESS' };
+  }
+
+  // Safe to upsert — status is pending, failed, or row doesn't exist yet
   const { error } = await supabase
     .from('pending_saas_deployments')
     .upsert(

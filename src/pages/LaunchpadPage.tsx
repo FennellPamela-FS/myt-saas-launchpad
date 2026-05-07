@@ -250,6 +250,8 @@ const LaunchpadPage: React.FC = () => {
         MISSING_INDUSTRY: 'Please select an industry category.',
         MISSING_INDUSTRY_OTHER: 'Please describe your industry.',
         NO_CHECKOUT_URL: 'Checkout is not yet configured. Please contact us.',
+        ALREADY_COMPLETED: 'An account with this email is already active. Please contact support at hello@mytcreative.com if you need help.',
+        PROVISIONING_IN_PROGRESS: 'Your site is currently being set up. Check your email for updates — this usually takes just a few minutes.',
         DB_ERROR: 'Could not save your information. Please try again.',
       };
       setCheckoutError(messages[result.code] ?? 'An unexpected error occurred.');
