@@ -157,6 +157,7 @@ const AIKickstart: React.FC = () => {
           >
             <SelectTrigger
               id="industry-select"
+              aria-label="Industry Category"
               className={
                 touched.industryCategory && !discoveryData.industryCategory
                   ? 'border-red-400 focus:ring-red-400'
@@ -241,12 +242,12 @@ const AIKickstart: React.FC = () => {
             value={themeSelection}
             onValueChange={(val) => setThemeSelection(val as ThemeSelection)}
           >
-            <SelectTrigger id="theme-select">
+            <SelectTrigger id="theme-select" aria-label="Site Theme">
               <SelectValue placeholder="Choose a theme…" />
             </SelectTrigger>
             <SelectContent>
               {THEME_OPTIONS.map((t) => (
-                <SelectItem key={t.value} value={t.value}>
+                <SelectItem key={t.value} value={t.value} textValue={t.label}>
                   <span className="font-medium">{t.label}</span>
                   <span className="ml-2 text-muted-foreground text-xs">— {t.description}</span>
                 </SelectItem>
