@@ -89,6 +89,11 @@ const LaunchpadPage: React.FC = () => {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [enrollComplete, setEnrollComplete] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState<PendingCheckout | null>(() => {
+    // Enrollment mode bypasses checkout — clear any stale localStorage state
+    if (new URLSearchParams(window.location.search).get('enroll')) {
+      localStorage.removeItem(CHECKOUT_STORAGE_KEY);
+      return null;
+    }
     try {
       const saved = localStorage.getItem(CHECKOUT_STORAGE_KEY);
       return saved ? (JSON.parse(saved) as PendingCheckout) : null;
