@@ -93,3 +93,4 @@ The website is fully responsive and optimized for:
 
 This project is private and proprietary to mytCreative.
 # myt-saas-launchpad
+# myt-client-platform
