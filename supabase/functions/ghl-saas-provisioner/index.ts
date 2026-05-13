@@ -104,7 +104,7 @@ const supabase = createClient(
 
 // ─── Step A: Parse GHL payload ───────────────────────────────────────────────
 
-function parseGHLPayload(body: GHLPayload): { email: string; locationId: string } | null {
+function parseGHLPayload(body: GHLPayload): { email: string; locationId: string; contactId: string | null } | null {
   const email =
     (body?.contact as Record<string, unknown>)?.email as string ||
     body?.email as string ||
@@ -115,8 +115,17 @@ function parseGHLPayload(body: GHLPayload): { email: string; locationId: string 
     body?.locationId as string ||
     null;
 
+  const contactId =
+    (body?.contact as Record<string, unknown>)?.id as string ||
+    body?.contactId as string ||
+    null;
+
   if (!email || !locationId) return null;
-  return { email: email.trim().toLowerCase(), locationId: locationId.trim() };
+  return {
+    email: email.trim().toLowerCase(),
+    locationId: locationId.trim(),
+    contactId: contactId?.trim() ?? null,
+  };
 }
 
 // ─── Step C: AI copy generation ──────────────────────────────────────────────
@@ -324,6 +333,34 @@ async function upsertClientSite(
   console.log(`client_sites row ready: /site/${slug}`);
 }
 
+// ─── Step D3: Update GHL contact with site URL + tag ─────────────────────────
+// Writes the live site URL to the contact's website field so the welcome
+// email workflow can reference it via {{contact.website}}.
+
+async function updateGHLContact(
+  contactId: string,
+  locationId: string,
+  apiKey: string,
+  siteUrl: string
+): Promise<void> {
+  const res = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Version: '2021-07-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      locationId,
+      website: siteUrl,
+      tags: ['digital-founda-active'],
+    }),
+  });
+  if (!res.ok) {
+    console.warn(`GHL contact update failed ${res.status}: ${await res.text()}`);
+  }
+}
+
 // ─── Step E: Netlify Build Hook ───────────────────────────────────────────────
 
 async function triggerNetlifyBuild(locationId: string, theme: string): Promise<void> {
@@ -363,7 +400,7 @@ serve(async (req: Request) => {
       });
     }
 
-    const { email: parsedEmail, locationId } = parsed;
+    const { email: parsedEmail, locationId, contactId } = parsed;
     email = parsedEmail;
 
     // ── Step B: Fetch pending deployment ───────────────────────────────────
@@ -398,6 +435,15 @@ serve(async (req: Request) => {
 
     // ── Step D2: Create client_sites row (powers the React platform) ──────
     await upsertClientSite(email, locationId, deployment as PendingDeployment, allValues);
+
+    // ── Step D3: Update GHL contact with site URL + tag ───────────────────
+    const ghlApiKey = Deno.env.get('GHL_AGENCY_API_KEY');
+    const businessName = (deployment.discovery_data as DiscoveryData).businessName || '';
+    const slug = generateSlug(businessName, locationId);
+    const siteUrl = `https://myt-client-platform.netlify.app/site/${slug}`;
+    if (contactId && ghlApiKey) {
+      await updateGHLContact(contactId, locationId, ghlApiKey, siteUrl);
+    }
 
     // ── Step E: Trigger Netlify build ─────────────────────────────────────
     await triggerNetlifyBuild(locationId, deployment.theme);
