@@ -94,12 +94,6 @@ type GeneratedFields = {
   brand_tagline: string;
 };
 
-type CustomValue = {
-  id: string;
-  name: string;
-  fieldKey: string;
-  value: string;
-};
 
 // ─── Supabase client (service role — bypasses RLS for writes) ────────────────
 
@@ -256,103 +250,32 @@ async function generateCopy(data: DiscoveryData, industry: string): Promise<Gene
 
 // ─── Step D: GHL Custom Values ────────────────────────────────────────────────
 
-const GHL_BASE = 'https://services.leadconnectorhq.com';
+// ─── Step D: Store generated copy in Supabase ────────────────────────────────
+// GHL Workflow reads this via the get-copy edge function and applies the
+// 49 values natively using GHL's own Custom Value actions — bypassing the
+// agency API scope limitation on sub-account Custom Values.
 
-// Exchange agency PIT token for a location-scoped token.
-// Location tokens are required for sub-account Custom Values endpoints.
-async function getLocationToken(agencyToken: string, companyId: string, locationId: string): Promise<string> {
-  const res = await fetch(`${GHL_BASE}/oauth/locationToken`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${agencyToken}`,
-      Version: '2021-07-28',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ companyId, locationId }),
-  });
-  if (!res.ok) throw new Error(`GHL location token exchange ${res.status}: ${await res.text()}`);
-  const json = await res.json();
-  const token = json.token ?? json.access_token;
-  if (!token) throw new Error('GHL location token exchange returned no token');
-  return token;
-}
-
-async function getCustomValues(locationId: string, token: string): Promise<CustomValue[]> {
-  const res = await fetch(`${GHL_BASE}/locations/${locationId}/customValues`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Version: '2021-07-28',
-    },
-  });
-  if (!res.ok) throw new Error(`GHL list custom values ${res.status}: ${await res.text()}`);
-  const json = await res.json();
-  return (json.customValues ?? []) as CustomValue[];
-}
-
-async function upsertCustomValue(
+async function saveGeneratedCopy(
+  email: string,
   locationId: string,
-  token: string,
-  existing: CustomValue | undefined,
-  key: string,
-  value: string
-): Promise<void> {
-  if (existing) {
-    await fetch(`${GHL_BASE}/locations/${locationId}/customValues/${existing.id}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Version: '2021-07-28',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ value }),
-    });
-  } else {
-    await fetch(`${GHL_BASE}/locations/${locationId}/customValues`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Version: '2021-07-28',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: key, value }),
-    });
-  }
-}
-
-async function pushCustomValues(
-  locationId: string,
-  agencyToken: string,
   fields: GeneratedFields,
   deployment: PendingDeployment
 ): Promise<void> {
-  // Exchange agency token for location-scoped token (required for Custom Values)
-  const companyId = Deno.env.get('GHL_COMPANY_ID');
-  if (!companyId) throw new Error('GHL_COMPANY_ID not set');
-  const locationToken = await getLocationToken(agencyToken, companyId, locationId);
-
-  // Fetch existing custom values from the snapshot-provisioned sub-account
-  const existing = await getCustomValues(locationId, locationToken);
-  const byKey = new Map(existing.map((cv) => [cv.fieldKey, cv]));
-
-  // 46 AI-generated fields + 3 static = 49 total custom values
-  const allValues: Record<string, string> = {
+  const allValues = {
     ...fields,
     business_email: deployment.email,
     industry_category: deployment.industry_category,
     theme_selection: deployment.theme,
   };
 
-  // Push in parallel batches of 5 to respect GHL rate limits
-  const entries = Object.entries(allValues);
-  const BATCH = 5;
-  for (let i = 0; i < entries.length; i += BATCH) {
-    await Promise.all(
-      entries.slice(i, i + BATCH).map(([key, value]) => {
-        const fieldKey = `custom_values.${key}`;
-        return upsertCustomValue(locationId, locationToken, byKey.get(fieldKey), key, value);
-      })
-    );
-  }
+  const { error } = await supabase
+    .from('pending_saas_deployments')
+    .update({ generated_copy: allValues })
+    .eq('email', email);
+
+  if (error) throw new Error(`Failed to save generated copy: ${error.message}`);
+
+  console.log(`Generated copy saved for ${email} → location ${locationId}`);
 }
 
 // ─── Step E: Netlify Build Hook ───────────────────────────────────────────────
@@ -424,11 +347,10 @@ serve(async (req: Request) => {
       deployment.industry_category
     );
 
-    // ── Step D: Push 49 Custom Values to GHL sub-account ──────────────────
-    const ghlApiKey = Deno.env.get('GHL_AGENCY_API_KEY');
-    if (!ghlApiKey) throw new Error('GHL_AGENCY_API_KEY not set');
-
-    await pushCustomValues(locationId, ghlApiKey, generatedFields, deployment as PendingDeployment);
+    // ── Step D: Save generated copy to Supabase ───────────────────────────
+    // GHL Workflow will read this via get-copy edge function and apply
+    // the 49 values natively using GHL's own Custom Value workflow actions.
+    await saveGeneratedCopy(email, locationId, generatedFields, deployment as PendingDeployment);
 
     // ── Step E: Trigger Netlify build ─────────────────────────────────────
     await triggerNetlifyBuild(locationId, deployment.theme);
