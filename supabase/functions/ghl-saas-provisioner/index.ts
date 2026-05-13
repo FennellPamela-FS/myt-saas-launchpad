@@ -258,10 +258,29 @@ async function generateCopy(data: DiscoveryData, industry: string): Promise<Gene
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
-async function getCustomValues(locationId: string, apiKey: string): Promise<CustomValue[]> {
+// Exchange agency PIT token for a location-scoped token.
+// Location tokens are required for sub-account Custom Values endpoints.
+async function getLocationToken(agencyToken: string, companyId: string, locationId: string): Promise<string> {
+  const res = await fetch(`${GHL_BASE}/oauth/locationToken`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${agencyToken}`,
+      Version: '2021-07-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ companyId, locationId }),
+  });
+  if (!res.ok) throw new Error(`GHL location token exchange ${res.status}: ${await res.text()}`);
+  const json = await res.json();
+  const token = json.token ?? json.access_token;
+  if (!token) throw new Error('GHL location token exchange returned no token');
+  return token;
+}
+
+async function getCustomValues(locationId: string, token: string): Promise<CustomValue[]> {
   const res = await fetch(`${GHL_BASE}/locations/${locationId}/customValues`, {
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${token}`,
       Version: '2021-07-28',
     },
   });
@@ -272,7 +291,7 @@ async function getCustomValues(locationId: string, apiKey: string): Promise<Cust
 
 async function upsertCustomValue(
   locationId: string,
-  apiKey: string,
+  token: string,
   existing: CustomValue | undefined,
   key: string,
   value: string
@@ -281,7 +300,7 @@ async function upsertCustomValue(
     await fetch(`${GHL_BASE}/locations/${locationId}/customValues/${existing.id}`, {
       method: 'PUT',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${token}`,
         Version: '2021-07-28',
         'Content-Type': 'application/json',
       },
@@ -291,7 +310,7 @@ async function upsertCustomValue(
     await fetch(`${GHL_BASE}/locations/${locationId}/customValues`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${token}`,
         Version: '2021-07-28',
         'Content-Type': 'application/json',
       },
@@ -302,12 +321,17 @@ async function upsertCustomValue(
 
 async function pushCustomValues(
   locationId: string,
-  apiKey: string,
+  agencyToken: string,
   fields: GeneratedFields,
   deployment: PendingDeployment
 ): Promise<void> {
+  // Exchange agency token for location-scoped token (required for Custom Values)
+  const companyId = Deno.env.get('GHL_COMPANY_ID');
+  if (!companyId) throw new Error('GHL_COMPANY_ID not set');
+  const locationToken = await getLocationToken(agencyToken, companyId, locationId);
+
   // Fetch existing custom values from the snapshot-provisioned sub-account
-  const existing = await getCustomValues(locationId, apiKey);
+  const existing = await getCustomValues(locationId, locationToken);
   const byKey = new Map(existing.map((cv) => [cv.fieldKey, cv]));
 
   // 46 AI-generated fields + 3 static = 49 total custom values
@@ -325,7 +349,7 @@ async function pushCustomValues(
     await Promise.all(
       entries.slice(i, i + BATCH).map(([key, value]) => {
         const fieldKey = `custom_values.${key}`;
-        return upsertCustomValue(locationId, apiKey, byKey.get(fieldKey), key, value);
+        return upsertCustomValue(locationId, locationToken, byKey.get(fieldKey), key, value);
       })
     );
   }
