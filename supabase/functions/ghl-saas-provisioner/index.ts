@@ -260,8 +260,8 @@ async function saveGeneratedCopy(
   locationId: string,
   fields: GeneratedFields,
   deployment: PendingDeployment
-): Promise<void> {
-  const allValues = {
+): Promise<Record<string, string>> {
+  const allValues: Record<string, string> = {
     ...fields,
     business_email: deployment.email,
     industry_category: deployment.industry_category,
@@ -276,6 +276,52 @@ async function saveGeneratedCopy(
   if (error) throw new Error(`Failed to save generated copy: ${error.message}`);
 
   console.log(`Generated copy saved for ${email} → location ${locationId}`);
+  return allValues;
+}
+
+// ─── Step D2: Create / update client_sites row ───────────────────────────────
+
+function generateSlug(businessName: string, locationId: string): string {
+  const base = businessName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .substring(0, 40);
+  // Append last 6 chars of locationId for guaranteed uniqueness
+  const suffix = locationId.slice(-6).toLowerCase();
+  return base ? `${base}-${suffix}` : suffix;
+}
+
+async function upsertClientSite(
+  email: string,
+  locationId: string,
+  deployment: PendingDeployment,
+  allValues: Record<string, string>
+): Promise<void> {
+  const businessName = (deployment.discovery_data as DiscoveryData).businessName || '';
+  const slug = generateSlug(businessName, locationId);
+
+  const { error } = await supabase
+    .from('client_sites_saas')
+    .upsert(
+      {
+        location_id: locationId,
+        email,
+        business_name: businessName,
+        slug,
+        theme: deployment.theme,
+        industry: deployment.industry_category,
+        generated_copy: allValues,
+        custom_edits: {},
+        status: 'active',
+      },
+      { onConflict: 'location_id' }
+    );
+
+  if (error) throw new Error(`Failed to upsert client_sites: ${error.message}`);
+  console.log(`client_sites row ready: /site/${slug}`);
 }
 
 // ─── Step E: Netlify Build Hook ───────────────────────────────────────────────
@@ -347,10 +393,11 @@ serve(async (req: Request) => {
       deployment.industry_category
     );
 
-    // ── Step D: Save generated copy to Supabase ───────────────────────────
-    // GHL Workflow will read this via get-copy edge function and apply
-    // the 49 values natively using GHL's own Custom Value workflow actions.
-    await saveGeneratedCopy(email, locationId, generatedFields, deployment as PendingDeployment);
+    // ── Step D: Save generated copy to pending_saas_deployments ──────────
+    const allValues = await saveGeneratedCopy(email, locationId, generatedFields, deployment as PendingDeployment);
+
+    // ── Step D2: Create client_sites row (powers the React platform) ──────
+    await upsertClientSite(email, locationId, deployment as PendingDeployment, allValues);
 
     // ── Step E: Trigger Netlify build ─────────────────────────────────────
     await triggerNetlifyBuild(locationId, deployment.theme);
