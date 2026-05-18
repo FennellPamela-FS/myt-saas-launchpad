@@ -36,12 +36,21 @@ export type DiscoveryData = {
   theAsk: string;
 };
 
+export type BrandingData = {
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  logoUrl: string | null;
+};
+
 type LaunchpadState = {
   discoveryData: DiscoveryData;
   themeSelection: ThemeSelection;
+  brandingData: BrandingData;
   userEmail: string;
   setDiscoveryData: (data: Partial<DiscoveryData>) => void;
   setThemeSelection: (theme: ThemeSelection) => void;
+  setBrandingData: (data: Partial<BrandingData>) => void;
   setUserEmail: (email: string) => void;
   resetDiscovery: () => void;
 };
@@ -57,14 +66,29 @@ const defaultDiscovery: DiscoveryData = {
   theAsk: '',
 };
 
+const defaultBranding: BrandingData = {
+  primaryColor: '#4EBCED',
+  secondaryColor: '#464E54',
+  accentColor: '#45899E',
+  logoUrl: null,
+};
+
 export const useLaunchpadStore = create<LaunchpadState>((set) => ({
   discoveryData: defaultDiscovery,
   themeSelection: 'professional',
+  brandingData: defaultBranding,
   userEmail: '',
   setDiscoveryData: (data) =>
     set((state) => ({ discoveryData: { ...state.discoveryData, ...data } })),
   setThemeSelection: (theme) => set({ themeSelection: theme }),
+  setBrandingData: (data) =>
+    set((state) => ({ brandingData: { ...state.brandingData, ...data } })),
   setUserEmail: (email) => set({ userEmail: email }),
   resetDiscovery: () =>
-    set({ discoveryData: defaultDiscovery, themeSelection: 'professional', userEmail: '' }),
+    set({
+      discoveryData: defaultDiscovery,
+      themeSelection: 'professional',
+      brandingData: defaultBranding,
+      userEmail: '',
+    }),
 }));

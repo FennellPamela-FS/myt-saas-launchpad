@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Upload } from 'lucide-react';
 import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
 import { Textarea } from '../../ui/textarea';
@@ -15,6 +15,7 @@ import {
   ThemeSelection,
   IndustryCategory,
 } from '../../../store/launchpadStore';
+import { supabase } from '../../../lib/supabaseClient';
 
 export const INDUSTRY_OPTIONS: { value: IndustryCategory; label: string }[] = [
   { value: 'home_services',  label: 'Home Services' },
@@ -98,13 +99,30 @@ const AIKickstart: React.FC = () => {
   const {
     discoveryData,
     themeSelection,
+    brandingData,
     userEmail,
     setDiscoveryData,
     setThemeSelection,
+    setBrandingData,
     setUserEmail,
   } = useLaunchpadStore();
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    const ext = file.name.split('.').pop();
+    const path = `logos/preview_${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('client-assets').upload(path, file, { upsert: true });
+    if (!error) {
+      const { data } = supabase.storage.from('client-assets').getPublicUrl(path);
+      setBrandingData({ logoUrl: data.publicUrl });
+    }
+    setLogoUploading(false);
+  };
 
   const handleDiscoveryChange = (
     key: keyof typeof discoveryData,
@@ -258,6 +276,65 @@ const AIKickstart: React.FC = () => {
             </div>
           );
         })}
+
+        {/* ── Brand Colors ── */}
+        <div className="space-y-4 pt-2 p-4 bg-muted/30 rounded-lg">
+          <Label className="text-sm font-semibold">Brand Colors</Label>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Primary', key: 'primaryColor' as const, hint: 'Buttons & accents' },
+              { label: 'Secondary', key: 'secondaryColor' as const, hint: 'Text & headers' },
+              { label: 'Accent', key: 'accentColor' as const, hint: 'Highlights' },
+            ].map(({ label, key, hint }) => (
+              <div key={key} className="space-y-1.5">
+                <Label className="text-xs">{label}</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={brandingData[key]}
+                    onChange={e => setBrandingData({ [key]: e.target.value })}
+                    className="h-9 w-9 rounded-md border cursor-pointer flex-shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={brandingData[key]}
+                    onChange={e => setBrandingData({ [key]: e.target.value })}
+                    className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{hint}</p>
+              </div>
+            ))}
+          </div>
+          {/* Color swatch preview */}
+          <div className="flex gap-2 h-6">
+            {[brandingData.primaryColor, brandingData.secondaryColor, brandingData.accentColor].map((c, i) => (
+              <div key={i} className="flex-1 rounded" style={{ backgroundColor: c }} />
+            ))}
+          </div>
+        </div>
+
+        {/* ── Logo Upload ── */}
+        <div className="space-y-1.5 pt-2">
+          <Label>Logo <span className="text-muted-foreground text-xs">(optional)</span></Label>
+          <div className="flex items-center gap-3">
+            {brandingData.logoUrl ? (
+              <img src={brandingData.logoUrl} alt="Logo" className="h-12 w-auto object-contain rounded border p-1 bg-gray-50" />
+            ) : (
+              <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center">
+                <Upload size={16} className="text-muted-foreground" />
+              </div>
+            )}
+            <div>
+              <label className="btn btn-outline text-sm cursor-pointer py-1.5 px-3 inline-flex items-center gap-2">
+                <Upload size={14} />
+                {logoUploading ? 'Uploading…' : brandingData.logoUrl ? 'Change' : 'Upload Logo'}
+                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={logoUploading} />
+              </label>
+              <p className="text-xs text-muted-foreground mt-1">PNG or JPG recommended</p>
+            </div>
+          </div>
+        </div>
 
         {/* ── Theme Selection ── */}
         <div className="space-y-1.5 pt-2">

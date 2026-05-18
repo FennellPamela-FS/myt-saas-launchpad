@@ -312,6 +312,10 @@ async function upsertClientSite(
   const businessName = (deployment.discovery_data as DiscoveryData).businessName || '';
   const slug = generateSlug(businessName, locationId);
 
+  // Pull brand colors and logo from pending_saas_deployments if stored
+  const dd = deployment.discovery_data as Record<string, unknown>;
+  const branding = (dd?.branding ?? {}) as Record<string, string>;
+
   const { error } = await supabase
     .from('client_sites_saas')
     .upsert(
@@ -322,6 +326,10 @@ async function upsertClientSite(
         slug,
         theme: deployment.theme,
         industry: deployment.industry_category,
+        primary_color: branding.primaryColor ?? '#4EBCED',
+        secondary_color: branding.secondaryColor ?? '#464E54',
+        accent_color: branding.accentColor ?? '#45899E',
+        logo_url: branding.logoUrl ?? null,
         generated_copy: allValues,
         custom_edits: {},
         status: 'active',

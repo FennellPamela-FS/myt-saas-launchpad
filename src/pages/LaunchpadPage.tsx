@@ -101,7 +101,7 @@ const LaunchpadPage: React.FC = () => {
       return null;
     }
   });
-  const { discoveryData, themeSelection, userEmail, resetDiscovery } = useLaunchpadStore();
+  const { discoveryData, themeSelection, brandingData, userEmail, resetDiscovery } = useLaunchpadStore();
   const [formData, setFormData] = useState<LaunchpadFormData>({
     business: {
       businessName: '',
@@ -252,7 +252,7 @@ const LaunchpadPage: React.FC = () => {
   const handleKickstartSubmit = async () => {
     setCheckoutError(null);
     setCheckoutLoading(true);
-    const result = await handleSaaSCheckout({ email: userEmail, discoveryData, themeSelection });
+    const result = await handleSaaSCheckout({ email: userEmail, discoveryData, themeSelection, brandingData });
     setCheckoutLoading(false);
 
     if ('code' in result) {

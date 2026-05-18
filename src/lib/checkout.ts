@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { DiscoveryData, ThemeSelection, IndustryCategory } from '../store/launchpadStore';
+import { DiscoveryData, ThemeSelection, IndustryCategory, BrandingData } from '../store/launchpadStore';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -7,6 +7,7 @@ export type CheckoutParams = {
   email: string;
   discoveryData: DiscoveryData;
   themeSelection: ThemeSelection;
+  brandingData?: BrandingData;
 };
 
 export type CheckoutError =
@@ -29,6 +30,7 @@ export async function handleSaaSCheckout({
   email,
   discoveryData,
   themeSelection,
+  brandingData,
 }: CheckoutParams): Promise<CheckoutError | CheckoutSuccess> {
   // Guard: email required
   if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -75,8 +77,12 @@ export async function handleSaaSCheckout({
   const upsertPayload: Record<string, unknown> = {
     email: email.trim().toLowerCase(),
     industry_category: discoveryData.industryCategory as IndustryCategory,
-    discovery_data: discoveryData,
+    discovery_data: { ...discoveryData, branding: brandingData },
     theme: themeSelection,
+    primary_color: brandingData?.primaryColor ?? '#4EBCED',
+    secondary_color: brandingData?.secondaryColor ?? '#464E54',
+    accent_color: brandingData?.accentColor ?? '#45899E',
+    logo_url: brandingData?.logoUrl ?? null,
   };
 
   // In test mode, pre-set location_id so the Stripe webhook can provision
