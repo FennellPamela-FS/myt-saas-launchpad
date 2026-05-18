@@ -92,6 +92,11 @@ type GeneratedFields = {
   // Brand / SEO (2)
   meta_description: string;
   brand_tagline: string;
+  // Contact info (4)
+  business_phone: string;
+  business_address: string;
+  business_hours: string;
+  contact_form_title: string;
 };
 
 
@@ -195,7 +200,12 @@ Return ONLY a valid JSON object (no markdown, no commentary) with exactly these 
   "cta_urgency_line": "Urgency or trust line below button (max 12 words)",
 
   "meta_description": "SEO meta description (max 155 characters)",
-  "brand_tagline": "Short memorable brand tagline (max 8 words)"
+  "brand_tagline": "Short memorable brand tagline (max 8 words)",
+
+  "business_phone": "A realistic placeholder phone number like (555) 123-4567",
+  "business_address": "A realistic placeholder address for this type of business and industry region",
+  "business_hours": "Typical business hours for this industry e.g. Mon-Fri: 9AM-6PM",
+  "contact_form_title": "Contact section heading (max 6 words, e.g. 'Get Your Free Estimate')"
 }`;
 }
 
