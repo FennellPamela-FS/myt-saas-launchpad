@@ -23,6 +23,7 @@ import AuthorPremiumPaymentPage from './pages/AuthorPremiumPaymentPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/TermsOfServicePage';
 import NotFoundPage from './pages/NotFoundPage';
+import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import './App.css';
 
 function App() {
@@ -32,7 +33,11 @@ function App() {
         <Header />
         <main>
           <Routes>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={
+              new URLSearchParams(window.location.search).get('payment') === 'success'
+                ? <PaymentSuccessPage />
+                : <HomePage />
+            } />
             <Route path="/solutions-hub" element={<SolutionsHubPage />} />
             <Route path="/author-services" element={<AuthorServicesPage />} />
             <Route path="/launchpad" element={<LaunchpadPage />} />
