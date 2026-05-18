@@ -46,7 +46,9 @@ export async function handleSaaSCheckout({
   }
 
   // Use test checkout URL when ?test=true is in the URL (never shown to real users)
-  const isTestMode = new URLSearchParams(window.location.search).get('test') === 'true';
+  const searchParams = new URLSearchParams(window.location.search);
+  const isTestMode = searchParams.get('test') === 'true';
+  const testLocationId = searchParams.get('location') ?? null;
   const checkoutBase = isTestMode
     ? (import.meta.env.VITE_GHL_TEST_CHECKOUT_URL as string)
     : (import.meta.env.VITE_GHL_MASTER_CHECKOUT_URL as string);
@@ -70,17 +72,21 @@ export async function handleSaaSCheckout({
   }
 
   // Safe to upsert — status is pending, failed, or row doesn't exist yet
+  const upsertPayload: Record<string, unknown> = {
+    email: email.trim().toLowerCase(),
+    industry_category: discoveryData.industryCategory as IndustryCategory,
+    discovery_data: discoveryData,
+    theme: themeSelection,
+  };
+
+  // In test mode, pre-set location_id so the Stripe webhook can provision
+  if (isTestMode && testLocationId) {
+    upsertPayload.location_id = testLocationId;
+  }
+
   const { error } = await supabase
     .from('pending_saas_deployments')
-    .upsert(
-      {
-        email: email.trim().toLowerCase(),
-        industry_category: discoveryData.industryCategory as IndustryCategory,
-        discovery_data: discoveryData,
-        theme: themeSelection,
-      },
-      { onConflict: 'email' }
-    );
+    .upsert(upsertPayload, { onConflict: 'email' });
 
   if (error) {
     console.error('[checkout] Supabase upsert failed:', error.message, error.details, error.hint);
