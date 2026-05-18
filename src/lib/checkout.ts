@@ -45,8 +45,11 @@ export async function handleSaaSCheckout({
     return { code: 'MISSING_INDUSTRY_OTHER' };
   }
 
-  // Guard: master checkout URL must be configured
-  const checkoutBase = import.meta.env.VITE_GHL_MASTER_CHECKOUT_URL as string;
+  // Use test checkout URL when ?test=true is in the URL (never shown to real users)
+  const isTestMode = new URLSearchParams(window.location.search).get('test') === 'true';
+  const checkoutBase = isTestMode
+    ? (import.meta.env.VITE_GHL_TEST_CHECKOUT_URL as string)
+    : (import.meta.env.VITE_GHL_MASTER_CHECKOUT_URL as string);
   if (!checkoutBase) {
     return { code: 'NO_CHECKOUT_URL' };
   }
