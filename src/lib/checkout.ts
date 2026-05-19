@@ -74,15 +74,13 @@ export async function handleSaaSCheckout({
   }
 
   // Safe to upsert — status is pending, failed, or row doesn't exist yet
+  // Branding is stored inside discovery_data.branding — not as separate columns
+  // (primary_color etc. only exist on client_sites_saas, not pending_saas_deployments)
   const upsertPayload: Record<string, unknown> = {
     email: email.trim().toLowerCase(),
     industry_category: discoveryData.industryCategory as IndustryCategory,
     discovery_data: { ...discoveryData, branding: brandingData },
     theme: themeSelection,
-    primary_color: brandingData?.primaryColor ?? '#4EBCED',
-    secondary_color: brandingData?.secondaryColor ?? '#464E54',
-    accent_color: brandingData?.accentColor ?? '#45899E',
-    logo_url: brandingData?.logoUrl ?? null,
   };
 
   // In test mode, pre-set location_id so the Stripe webhook can provision
