@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle } from 'lucide-react';
+import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle, UserPlus, Link2 } from 'lucide-react';
 
 type SiteRow = {
   id: string;
@@ -49,9 +49,14 @@ function StatusBadge({ status }: { status: SiteRow['status'] }) {
   );
 }
 
+function getEnrollLink(locationId: string): string {
+  return `${window.location.origin}/launchpad?enroll=${locationId}`;
+}
+
 function ActionsCell({ row, onEditDomain }: { row: SiteRow; onEditDomain: () => void }) {
-  const [open, setOpen]     = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [open, setOpen]             = useState(false);
+  const [copied, setCopied]         = useState(false);
+  const [copiedEnroll, setCopiedEnroll] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,6 +75,14 @@ function ActionsCell({ row, onEditDomain }: { row: SiteRow; onEditDomain: () => 
     setTimeout(() => setCopied(false), 2000);
   }
 
+  async function copyEnrollLink() {
+    if (!row.location_id) return;
+    await navigator.clipboard.writeText(getEnrollLink(row.location_id));
+    setCopiedEnroll(true);
+    setOpen(false);
+    setTimeout(() => setCopiedEnroll(false), 2000);
+  }
+
   return (
     <div ref={ref} className="relative inline-block text-left">
       <button
@@ -80,16 +93,23 @@ function ActionsCell({ row, onEditDomain }: { row: SiteRow; onEditDomain: () => 
         <ChevronDown className="w-3.5 h-3.5" />
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-1 w-52 rounded-md border border-gray-200 bg-white shadow-lg">
+        <div className="absolute right-0 z-50 mt-1 w-56 rounded-md border border-gray-200 bg-white shadow-lg">
           <button
             onClick={copyMagicLink}
             className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            {copied
-              ? <Check className="w-4 h-4 text-green-500" />
-              : <Copy className="w-4 h-4 text-gray-400" />}
+            {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-400" />}
             {copied ? 'Copied!' : 'Copy Magic Link'}
           </button>
+          {row.location_id && (
+            <button
+              onClick={copyEnrollLink}
+              className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              {copiedEnroll ? <Check className="w-4 h-4 text-green-500" /> : <Link2 className="w-4 h-4 text-gray-400" />}
+              {copiedEnroll ? 'Copied!' : 'Copy Enrollment Link'}
+            </button>
+          )}
           <div className="border-t border-gray-100" />
           <button
             onClick={() => { setOpen(false); onEditDomain(); }}
@@ -164,6 +184,25 @@ export default function AgencyAdminPage() {
   const [sites, setSites]           = useState<SiteRow[]>([]);
   const [loading, setLoading]       = useState(false);
   const [fetchError, setFetchError] = useState('');
+
+  // Enroll existing client panel
+  const [showEnroll, setShowEnroll]         = useState(false);
+  const [enrollLocationId, setEnrollLocationId] = useState('');
+  const [enrollCopied, setEnrollCopied]     = useState(false);
+
+  function handleEnrollCopy() {
+    const id = enrollLocationId.trim();
+    if (!id) return;
+    navigator.clipboard.writeText(getEnrollLink(id));
+    setEnrollCopied(true);
+    setTimeout(() => setEnrollCopied(false), 2000);
+  }
+
+  function handleEnrollOpen() {
+    const id = enrollLocationId.trim();
+    if (!id) return;
+    window.open(getEnrollLink(id), '_blank', 'noopener,noreferrer');
+  }
 
   // Inline domain editing
   const [editingDomainId, setEditingDomainId] = useState<string | null>(null);
@@ -476,8 +515,62 @@ export default function AgencyAdminPage() {
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-900">Client Sites</h2>
-            <span className="text-xs text-gray-400">{sites.length} records</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-400">{sites.length} records</span>
+              <button
+                onClick={() => setShowEnroll(o => !o)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-gray-900 text-white hover:bg-gray-800 transition-colors"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                Enroll Client
+              </button>
+            </div>
           </div>
+
+          {/* Enroll existing client panel */}
+          {showEnroll && (
+            <div className="px-6 py-4 bg-blue-50 border-b border-blue-100">
+              <p className="text-xs font-medium text-blue-800 mb-2">Enroll an existing GHL sub-account — generates a pre-filled enrollment link</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={enrollLocationId}
+                  onChange={e => setEnrollLocationId(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleEnrollCopy(); if (e.key === 'Escape') setShowEnroll(false); }}
+                  placeholder="GHL Location ID (e.g. rgqVptWt6sWSt3XafLy7)"
+                  className="flex-1 px-3 py-1.5 text-sm font-mono border border-blue-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
+                <button
+                  onClick={handleEnrollCopy}
+                  disabled={!enrollLocationId.trim()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-blue-200 bg-white text-blue-700 hover:bg-blue-100 disabled:opacity-40 transition-colors"
+                >
+                  {enrollCopied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {enrollCopied ? 'Copied!' : 'Copy Link'}
+                </button>
+                <button
+                  onClick={handleEnrollOpen}
+                  disabled={!enrollLocationId.trim()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Open Form
+                </button>
+                <button
+                  onClick={() => { setShowEnroll(false); setEnrollLocationId(''); }}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {enrollLocationId.trim() && (
+                <p className="mt-2 text-xs text-blue-600 font-mono truncate">
+                  {getEnrollLink(enrollLocationId.trim())}
+                </p>
+              )}
+            </div>
+          )}
 
           {fetchError ? (
             <div className="p-6 text-sm text-red-600">{fetchError}</div>
