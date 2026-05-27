@@ -334,18 +334,18 @@ export default function AgencyAdminPage() {
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Sticky header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center">
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
+          <div className="flex items-center justify-between py-3 md:py-4 gap-2 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
                 <Shield className="w-4 h-4 text-white" />
               </div>
-              <div>
-                <h1 className="text-base font-semibold text-gray-900">Agency Command Center</h1>
-                <p className="text-xs text-gray-500">{verifiedEmail}</p>
+              <div className="min-w-0">
+                <h1 className="text-sm md:text-base font-semibold text-gray-900 truncate">Agency Command Center</h1>
+                <p className="text-xs text-gray-500 truncate">{verifiedEmail}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {(activeTab === 'sites' || activeTab === 'queue') && (
                 <button
                   onClick={activeTab === 'sites' ? fetchSites : fetchQueue}
@@ -353,28 +353,28 @@ export default function AgencyAdminPage() {
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-gray-200 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${(loading || queueLoading) ? 'animate-spin' : ''}`} />
-                  Refresh
+                  <span className="hidden sm:inline">Refresh</span>
                 </button>
               )}
               <button
                 onClick={() => { sessionStorage.removeItem(SESSION_KEY); setVerifiedEmail(null); }}
-                className="text-xs text-gray-500 hover:text-gray-800 px-3 py-1.5 transition-colors"
+                className="text-xs text-gray-500 hover:text-gray-800 px-3 py-1.5 transition-colors whitespace-nowrap"
               >
                 Sign out
               </button>
             </div>
           </div>
-          {/* Tab nav */}
-          <div className="flex gap-1 -mb-px">
+          {/* Tab nav — scrollable on mobile */}
+          <div className="flex gap-0.5 -mb-px overflow-x-auto scrollbar-none">
             {([
-              { id: 'sites',   label: 'Client Sites',       icon: Server   },
-              { id: 'queue',   label: 'Provisioning Queue',  icon: Clock    },
-              { id: 'runbook', label: 'Domain Runbook',      icon: BookOpen },
+              { id: 'sites',   label: 'Client Sites',      icon: Server   },
+              { id: 'queue',   label: 'Provisionin Queue',  icon: Clock    },
+              { id: 'runbook', label: 'Domain Runbook',     icon: BookOpen },
             ] as const).map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 md:px-4 py-2.5 text-xs md:text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                   activeTab === tab.id
                     ? 'border-gray-900 text-gray-900'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -390,9 +390,9 @@ export default function AgencyAdminPage() {
 
       {/* ── Provisioning Queue tab ──────────────────────────────────────── */}
       {activeTab === 'queue' && (
-        <div className="max-w-5xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
+            <div className="px-4 md:px-6 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Pending &amp; Failed Deployments</h2>
               <p className="text-xs text-gray-400 mt-0.5">Rows that never completed provisioning — trigger manually if stuck</p>
             </div>
@@ -404,19 +404,19 @@ export default function AgencyAdminPage() {
                 <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : queue.length === 0 ? (
-              <div className="p-16 text-center text-sm text-gray-400">No pending deployments.</div>
+              <div className="p-12 text-center text-sm text-gray-400">No pending deployments.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50/60">
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Email</th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business Name</th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Location ID</th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Industry</th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Created</th>
-                      <th className="px-6 py-3" />
+                      <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business</th>
+                      <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden sm:table-cell">Email</th>
+                      <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Location ID</th>
+                      <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell">Industry</th>
+                      <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
+                      <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Created</th>
+                      <th className="px-4 md:px-6 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -425,13 +425,13 @@ export default function AgencyAdminPage() {
                       const canProvision = !!row.location_id && row.status !== 'processing';
                       return (
                         <tr key={row.email} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="px-6 py-4 text-xs text-gray-600">{row.email}</td>
-                          <td className="px-6 py-4 font-medium text-gray-900">
+                          <td className="px-4 md:px-6 py-4 font-medium text-gray-900 text-sm">
                             {row.discovery_data?.businessName ?? <span className="text-gray-400">—</span>}
                           </td>
-                          <td className="px-6 py-4 font-mono text-xs text-gray-600">{row.location_id ?? <span className="text-gray-400">—</span>}</td>
-                          <td className="px-6 py-4 text-xs text-gray-500">{row.industry_category}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 md:px-6 py-4 text-xs text-gray-600 hidden sm:table-cell">{row.email}</td>
+                          <td className="px-4 md:px-6 py-4 font-mono text-xs text-gray-600 hidden md:table-cell">{row.location_id ?? <span className="text-gray-400">—</span>}</td>
+                          <td className="px-4 md:px-6 py-4 text-xs text-gray-500 hidden lg:table-cell">{row.industry_category}</td>
+                          <td className="px-4 md:px-6 py-4">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                               row.status === 'pending'    ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
                               row.status === 'processing' ? 'bg-blue-100 text-blue-800 border-blue-200' :
@@ -446,14 +446,14 @@ export default function AgencyAdminPage() {
                               </p>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-xs text-gray-500 whitespace-nowrap">
+                          <td className="px-4 md:px-6 py-4 text-xs text-gray-500 whitespace-nowrap hidden md:table-cell">
                             {new Date(row.created_at).toLocaleDateString()}
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 md:px-6 py-4">
                             <button
                               onClick={() => triggerProvisioner(row)}
                               disabled={!canProvision || state === 'running'}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition-colors whitespace-nowrap"
                             >
                               {state === 'running' ? (
                                 <><RefreshCw className="w-3 h-3 animate-spin" /> Running…</>
@@ -479,7 +479,8 @@ export default function AgencyAdminPage() {
 
       {/* ── Runbook tab ──────────────────────────────────────────────────── */}
       {activeTab === 'runbook' && (
-        <div className="max-w-3xl mx-auto px-6 py-10 space-y-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
           {/* One-time setup */}
           <section>
@@ -637,13 +638,14 @@ export default function AgencyAdminPage() {
           </section>
 
         </div>
+        </div>
       )}
 
       {/* ── Sites tab ────────────────────────────────────────────────────── */}
       {activeTab === 'sites' && (
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6 md:mb-8">
           {[
             { label: 'Total Sites', value: sites.length },
             { label: 'Live',        value: liveCt       },
@@ -658,56 +660,59 @@ export default function AgencyAdminPage() {
 
         {/* Table card */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">Client Sites</h2>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-400">{sites.length} records</span>
+          <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-gray-900 truncate">Client Sites</h2>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-xs text-gray-400 hidden sm:inline">{sites.length} records</span>
               <button
                 onClick={() => setShowEnroll(o => !o)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-gray-900 text-white hover:bg-gray-800 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs md:text-sm font-medium rounded-md bg-gray-900 text-white hover:bg-gray-800 transition-colors whitespace-nowrap"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                Enroll Client
+                <span className="hidden sm:inline">Enroll Client</span>
+                <span className="sm:hidden">Enroll</span>
               </button>
             </div>
           </div>
 
           {/* Enroll existing client panel */}
           {showEnroll && (
-            <div className="px-6 py-4 bg-blue-50 border-b border-blue-100">
-              <p className="text-xs font-medium text-blue-800 mb-2">Enroll an existing GHL sub-account — generates a pre-filled enrollment link</p>
-              <div className="flex items-center gap-2">
+            <div className="px-4 md:px-6 py-4 bg-blue-50 border-b border-blue-100">
+              <p className="text-xs font-medium text-blue-800 mb-3">Enroll an existing GHL sub-account — generates a pre-filled enrollment link</p>
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={enrollLocationId}
                   onChange={e => setEnrollLocationId(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleEnrollCopy(); if (e.key === 'Escape') setShowEnroll(false); }}
-                  placeholder="GHL Location ID (e.g. rgqVptWt6sWSt3XafLy7)"
-                  className="flex-1 px-3 py-1.5 text-sm font-mono border border-blue-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="GHL Location ID"
+                  className="flex-1 px-3 py-1.5 text-sm font-mono border border-blue-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
                   autoFocus
                 />
-                <button
-                  onClick={handleEnrollCopy}
-                  disabled={!enrollLocationId.trim()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-blue-200 bg-white text-blue-700 hover:bg-blue-100 disabled:opacity-40 transition-colors"
-                >
-                  {enrollCopied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  {enrollCopied ? 'Copied!' : 'Copy Link'}
-                </button>
-                <button
-                  onClick={handleEnrollOpen}
-                  disabled={!enrollLocationId.trim()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Open Form
-                </button>
-                <button
-                  onClick={() => { setShowEnroll(false); setEnrollLocationId(''); }}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleEnrollCopy}
+                    disabled={!enrollLocationId.trim()}
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-blue-200 bg-white text-blue-700 hover:bg-blue-100 disabled:opacity-40 transition-colors"
+                  >
+                    {enrollCopied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    {enrollCopied ? 'Copied!' : 'Copy Link'}
+                  </button>
+                  <button
+                    onClick={handleEnrollOpen}
+                    disabled={!enrollLocationId.trim()}
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open Form
+                  </button>
+                  <button
+                    onClick={() => { setShowEnroll(false); setEnrollLocationId(''); }}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               {enrollLocationId.trim() && (
                 <p className="mt-2 text-xs text-blue-600 font-mono truncate">
@@ -730,14 +735,14 @@ export default function AgencyAdminPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/60">
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business Name</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Email</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">GHL Location ID</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Site URL</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Custom Domain</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Created</th>
-                    <th className="px-6 py-3" />
+                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden sm:table-cell">Email</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell">Location ID</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Site URL</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Custom Domain</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Created</th>
+                    <th className="px-4 md:px-6 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -749,15 +754,15 @@ export default function AgencyAdminPage() {
 
                     return (
                       <tr key={site.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">{site.business_name}</td>
-                        <td className="px-6 py-4 text-gray-500 text-xs">{site.email}</td>
-                        <td className="px-6 py-4 font-mono text-xs text-gray-600">{site.location_id || '—'}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 md:px-6 py-4 font-medium text-gray-900 text-sm">{site.business_name}</td>
+                        <td className="px-4 md:px-6 py-4 text-gray-500 text-xs hidden sm:table-cell">{site.email}</td>
+                        <td className="px-4 md:px-6 py-4 font-mono text-xs text-gray-600 hidden lg:table-cell">{site.location_id || '—'}</td>
+                        <td className="px-4 md:px-6 py-4">
                           <a
                             href={siteUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline"
+                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline text-xs md:text-sm"
                           >
                             {site.slug}
                             <ExternalLink className="w-3 h-3" />
@@ -765,7 +770,7 @@ export default function AgencyAdminPage() {
                         </td>
 
                         {/* Custom Domain — inline editable */}
-                        <td className="px-6 py-4 min-w-[220px]">
+                        <td className="px-4 md:px-6 py-4 hidden md:table-cell min-w-[200px]">
                           {isEditingDomain ? (
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-1.5">
@@ -823,13 +828,13 @@ export default function AgencyAdminPage() {
                           )}
                         </td>
 
-                        <td className="px-6 py-4">
+                        <td className="px-4 md:px-6 py-4">
                           <StatusBadge status={site.status} />
                         </td>
-                        <td className="px-6 py-4 text-gray-500 text-xs whitespace-nowrap">
+                        <td className="px-4 md:px-6 py-4 text-gray-500 text-xs whitespace-nowrap hidden md:table-cell">
                           {new Date(site.created_at).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 md:px-6 py-4">
                           <ActionsCell row={site} onEditDomain={() => startEditingDomain(site)} />
                         </td>
                       </tr>
