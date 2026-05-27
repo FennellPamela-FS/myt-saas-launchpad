@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle, UserPlus, Link2, Zap, Clock } from 'lucide-react';
+import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle, UserPlus, Link2, Zap, Clock, Users } from 'lucide-react';
 
 type SiteRow = {
   id: string;
@@ -21,6 +21,22 @@ type QueueRow = {
   discovery_data: { businessName?: string } | null;
   created_at: string;
   error_message?: string | null;
+  cohort?: string | null;
+};
+
+type CohortRow = {
+  email: string;
+  location_id: string | null;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  industry_category: string;
+  discovery_data: { businessName?: string } | null;
+  created_at: string;
+  cohort: string;
+};
+
+// Known cohorts with display config — add new cohorts here
+const COHORT_REGISTRY: Record<string, { displayName: string; seatLimit: number; color: string }> = {
+  inspire_dmv: { displayName: 'Inspire DMV', seatLimit: 13, color: 'amber' },
 };
 
 const AGENCY_ADMINS = (import.meta.env.VITE_AGENCY_ADMINS as string ?? '')
@@ -203,7 +219,7 @@ export default function AgencyAdminPage() {
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(
     () => sessionStorage.getItem(SESSION_KEY)
   );
-  const [activeTab, setActiveTab] = useState<'sites' | 'queue' | 'runbook'>('sites');
+  const [activeTab, setActiveTab] = useState<'sites' | 'queue' | 'cohorts' | 'runbook'>('sites');
   const [sites, setSites]           = useState<SiteRow[]>([]);
   const [loading, setLoading]       = useState(false);
   const [fetchError, setFetchError] = useState('');
@@ -213,6 +229,26 @@ export default function AgencyAdminPage() {
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueError, setQueueError] = useState('');
   const [provisioning, setProvisioning] = useState<Record<string, 'running' | 'done' | 'error'>>({});
+
+  // Cohorts
+  const [cohortRows, setCohortRows]         = useState<CohortRow[]>([]);
+  const [cohortLoading, setCohortLoading]   = useState(false);
+  const [cohortError, setCohortError]       = useState('');
+  const [cohortLinkCopied, setCohortLinkCopied] = useState<string | null>(null);
+
+  async function fetchCohorts() {
+    setCohortLoading(true);
+    setCohortError('');
+    const { data, error } = await supabase
+      .from('pending_saas_deployments')
+      .select('email, location_id, status, industry_category, discovery_data, created_at, cohort')
+      .not('cohort', 'is', null)
+      .order('created_at', { ascending: true });
+
+    if (error) setCohortError(error.message);
+    else setCohortRows((data ?? []) as CohortRow[]);
+    setCohortLoading(false);
+  }
 
   async function fetchQueue() {
     setQueueLoading(true);
@@ -296,7 +332,7 @@ export default function AgencyAdminPage() {
   }
 
   useEffect(() => {
-    if (verifiedEmail) { fetchSites(); fetchQueue(); }
+    if (verifiedEmail) { fetchSites(); fetchQueue(); fetchCohorts(); }
   }, [verifiedEmail]);
 
   useEffect(() => {
@@ -380,9 +416,10 @@ export default function AgencyAdminPage() {
           {/* Tab nav — scrollable on mobile */}
           <div className="flex gap-0.5 -mb-px overflow-x-auto scrollbar-none">
             {([
-              { id: 'sites',   label: 'Client Sites',      icon: Server   },
-              { id: 'queue',   label: 'Provisionin Queue',  icon: Clock    },
-              { id: 'runbook', label: 'Domain Runbook',     icon: BookOpen },
+              { id: 'sites',   label: 'Client Sites',       icon: Server   },
+              { id: 'queue',   label: 'Provisioning Queue',  icon: Clock    },
+              { id: 'cohorts', label: 'Cohorts',             icon: Users    },
+              { id: 'runbook', label: 'Domain Runbook',      icon: BookOpen },
             ] as const).map(tab => (
               <button
                 key={tab.id}
@@ -487,6 +524,137 @@ export default function AgencyAdminPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Cohorts tab ──────────────────────────────────────────────────── */}
+      {activeTab === 'cohorts' && (
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-8">
+
+          {cohortError && (
+            <div className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">{cohortError}</div>
+          )}
+
+          {cohortLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : Object.entries(COHORT_REGISTRY).map(([key, cfg]) => {
+            const members = cohortRows.filter(r => r.cohort === key);
+            const active  = members.filter(r => r.status === 'completed').length;
+            const pending = members.filter(r => r.status === 'pending' || r.status === 'processing').length;
+            const failed  = members.filter(r => r.status === 'failed').length;
+            const pct     = Math.round((members.length / cfg.seatLimit) * 100);
+            const vipUrl  = `${window.location.origin}/vip?cohort=${key}`;
+
+            return (
+              <div key={key}>
+                {/* Cohort header card */}
+                <div className="bg-gray-900 rounded-2xl p-6 mb-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-400/10 border border-amber-400/30 flex items-center justify-center flex-shrink-0">
+                        <Shield className="w-5 h-5 text-amber-400" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-bold text-white">{cfg.displayName}</h2>
+                        <p className="text-xs text-gray-400 font-mono mt-0.5">{key}</p>
+                      </div>
+                    </div>
+
+                    {/* Seat meter */}
+                    <div className="flex-1 min-w-48 max-w-xs">
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className="text-gray-400">Seats claimed</span>
+                        <span className="text-white font-medium">{members.length} / {cfg.seatLimit}</span>
+                      </div>
+                      <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-red-400' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex gap-4 mt-2 text-xs">
+                        <span className="text-emerald-400">{active} live</span>
+                        <span className="text-amber-400">{pending} pending</span>
+                        {failed > 0 && <span className="text-red-400">{failed} failed</span>}
+                        <span className="text-gray-500 ml-auto">{cfg.seatLimit - members.length} remaining</span>
+                      </div>
+                    </div>
+
+                    {/* Copy VIP link */}
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(vipUrl);
+                        setCohortLinkCopied(key);
+                        setTimeout(() => setCohortLinkCopied(null), 2000);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-medium hover:bg-amber-400/20 transition-colors whitespace-nowrap"
+                    >
+                      {cohortLinkCopied === key
+                        ? <><Check className="w-3.5 h-3.5" /> Copied!</>
+                        : <><Copy className="w-3.5 h-3.5" /> Copy VIP Link</>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Member table */}
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  {members.length === 0 ? (
+                    <div className="py-12 text-center text-sm text-gray-400">No members have claimed a seat yet.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 bg-gray-50/60">
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">#</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden sm:table-cell">Email</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Industry</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Location ID</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell">Claimed</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {members.map((row, i) => (
+                            <tr key={row.email} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-5 py-3.5 text-xs text-gray-400 font-mono">{i + 1}</td>
+                              <td className="px-5 py-3.5 font-medium text-gray-900 text-sm">
+                                {row.discovery_data?.businessName ?? <span className="text-gray-400 font-normal">—</span>}
+                              </td>
+                              <td className="px-5 py-3.5 text-xs text-gray-500 hidden sm:table-cell">{row.email}</td>
+                              <td className="px-5 py-3.5 text-xs text-gray-500 hidden md:table-cell capitalize">
+                                {row.industry_category?.replace(/_/g, ' ')}
+                              </td>
+                              <td className="px-5 py-3.5">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                                  row.status === 'completed'  ? 'bg-green-100 text-green-800 border-green-200' :
+                                  row.status === 'processing' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                                  row.status === 'failed'     ? 'bg-red-100 text-red-800 border-red-200' :
+                                  'bg-yellow-100 text-yellow-800 border-yellow-200'
+                                }`}>
+                                  {row.status === 'completed' ? 'Live' : row.status}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3.5 font-mono text-xs text-gray-500 hidden md:table-cell">
+                                {row.location_id
+                                  ? <span title={row.location_id}>{row.location_id.slice(0, 12)}…</span>
+                                  : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="px-5 py-3.5 text-xs text-gray-400 whitespace-nowrap hidden lg:table-cell">
+                                {new Date(row.created_at).toLocaleDateString()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
