@@ -331,7 +331,7 @@ export default function AgencyAdminPage() {
   const pendingCt = sites.filter(s => s.status === 'pending').length;
 
   return (
-    <div className="min-h-screen bg-gray-50 overflow-x-hidden">
+    <div className="min-h-screen bg-gray-50">
       {/* Sticky header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
@@ -732,12 +732,12 @@ export default function AgencyAdminPage() {
             <div className="p-16 text-center text-sm text-gray-400">No sites found.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/60">
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden sm:table-cell">Email</th>
-                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell">Location ID</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell w-36">Location ID</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Site URL</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Custom Domain</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
@@ -758,7 +758,9 @@ export default function AgencyAdminPage() {
                           <span className="block truncate" title={site.business_name}>{site.business_name}</span>
                         </td>
                         <td className="px-4 md:px-6 py-4 text-gray-500 text-xs hidden sm:table-cell">{site.email}</td>
-                        <td className="px-4 md:px-6 py-4 font-mono text-xs text-gray-600 hidden lg:table-cell">{site.location_id || '—'}</td>
+                        <td className="px-4 md:px-6 py-4 hidden lg:table-cell w-36">
+                          <span className="block font-mono text-xs text-gray-600 truncate" title={site.location_id || ''}>{site.location_id || '—'}</span>
+                        </td>
                         <td className="px-4 md:px-6 py-4">
                           <a
                             href={siteUrl}
