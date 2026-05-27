@@ -30,7 +30,7 @@ const AGENCY_ADMINS = (import.meta.env.VITE_AGENCY_ADMINS as string ?? '')
 
 const CLIENT_PLATFORM_URL = (
   import.meta.env.VITE_CLIENT_PLATFORM_URL as string ?? 'https://myt-client-platform.netlify.app'
-).replace(/\/$/, '');
+).replace(/\/$/, '').replace(/\/site$/, '');
 
 const GHL_ACCOUNTS_BASE = 'https://app.mytcreative.com/accounts/detail';
 
@@ -754,7 +754,9 @@ export default function AgencyAdminPage() {
 
                     return (
                       <tr key={site.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 md:px-6 py-4 font-medium text-gray-900 text-sm">{site.business_name}</td>
+                        <td className="px-4 md:px-6 py-4 font-medium text-gray-900 text-sm max-w-[140px] md:max-w-[220px] lg:max-w-none">
+                          <span className="block truncate" title={site.business_name}>{site.business_name}</span>
+                        </td>
                         <td className="px-4 md:px-6 py-4 text-gray-500 text-xs hidden sm:table-cell">{site.email}</td>
                         <td className="px-4 md:px-6 py-4 font-mono text-xs text-gray-600 hidden lg:table-cell">{site.location_id || '—'}</td>
                         <td className="px-4 md:px-6 py-4">
