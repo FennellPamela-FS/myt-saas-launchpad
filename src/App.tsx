@@ -25,6 +25,7 @@ import TermsOfServicePage from './pages/TermsOfServicePage';
 import NotFoundPage from './pages/NotFoundPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import AgencyAdminPage from './pages/AgencyAdminPage';
+import VipOnboardingPage from './pages/VipOnboardingPage';
 import './App.css';
 
 function MainLayout() {
@@ -43,13 +44,16 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Standalone route — no site header/footer */}
+        {/* Standalone routes — no site header/footer */}
         <Route path="/agency-admin" element={<AgencyAdminPage />} />
+        <Route path="/vip"          element={<VipOnboardingPage />} />
 
         {/* All public routes wrapped in site layout */}
         <Route element={<MainLayout />}>
           <Route path="/" element={
-            new URLSearchParams(window.location.search).get('payment') === 'success'
+            new URLSearchParams(window.location.search).get('cohort')
+              ? <VipOnboardingPage />
+              : new URLSearchParams(window.location.search).get('payment') === 'success'
               ? <PaymentSuccessPage />
               : <HomePage />
           } />
