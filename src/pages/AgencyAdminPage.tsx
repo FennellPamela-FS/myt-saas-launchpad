@@ -64,9 +64,10 @@ function getEnrollLink(locationId: string): string {
 }
 
 function ActionsCell({ row, onEditDomain }: { row: SiteRow; onEditDomain: () => void }) {
-  const [open, setOpen]             = useState(false);
-  const [copied, setCopied]         = useState(false);
-  const [copiedEnroll, setCopiedEnroll] = useState(false);
+  const [open, setOpen]                   = useState(false);
+  const [copied, setCopied]               = useState(false);
+  const [copiedEnroll, setCopiedEnroll]   = useState(false);
+  const [copiedLocId, setCopiedLocId]     = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -80,17 +81,22 @@ function ActionsCell({ row, onEditDomain }: { row: SiteRow; onEditDomain: () => 
 
   async function copyMagicLink() {
     await navigator.clipboard.writeText(getMagicLink(row));
-    setCopied(true);
-    setOpen(false);
+    setCopied(true); setOpen(false);
     setTimeout(() => setCopied(false), 2000);
   }
 
   async function copyEnrollLink() {
     if (!row.location_id) return;
     await navigator.clipboard.writeText(getEnrollLink(row.location_id));
-    setCopiedEnroll(true);
-    setOpen(false);
+    setCopiedEnroll(true); setOpen(false);
     setTimeout(() => setCopiedEnroll(false), 2000);
+  }
+
+  async function copyLocationId() {
+    if (!row.location_id) return;
+    await navigator.clipboard.writeText(row.location_id);
+    setCopiedLocId(true); setOpen(false);
+    setTimeout(() => setCopiedLocId(false), 2000);
   }
 
   return (
@@ -111,7 +117,7 @@ function ActionsCell({ row, onEditDomain }: { row: SiteRow; onEditDomain: () => 
             {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-400" />}
             {copied ? 'Copied!' : 'Copy Magic Link'}
           </button>
-          {row.location_id && (
+          {row.location_id && (<>
             <button
               onClick={copyEnrollLink}
               className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
@@ -119,7 +125,14 @@ function ActionsCell({ row, onEditDomain }: { row: SiteRow; onEditDomain: () => 
               {copiedEnroll ? <Check className="w-4 h-4 text-green-500" /> : <Link2 className="w-4 h-4 text-gray-400" />}
               {copiedEnroll ? 'Copied!' : 'Copy Enrollment Link'}
             </button>
-          )}
+            <button
+              onClick={copyLocationId}
+              className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              {copiedLocId ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-400" />}
+              {copiedLocId ? 'Copied!' : 'Copy Location ID'}
+            </button>
+          </>)}
           <div className="border-t border-gray-100" />
           <button
             onClick={() => { setOpen(false); onEditDomain(); }}
@@ -331,7 +344,7 @@ export default function AgencyAdminPage() {
   const pendingCt = sites.filter(s => s.status === 'pending').length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Sticky header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
@@ -732,16 +745,13 @@ export default function AgencyAdminPage() {
             <div className="p-16 text-center text-sm text-gray-400">No sites found.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/60">
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business</th>
-                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden sm:table-cell">Email</th>
-                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell w-36">Location ID</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Site URL</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Custom Domain</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Created</th>
                     <th className="px-4 md:px-6 py-3" />
                   </tr>
                 </thead>
@@ -754,27 +764,27 @@ export default function AgencyAdminPage() {
 
                     return (
                       <tr key={site.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 md:px-6 py-4 font-medium text-gray-900 text-sm max-w-[140px] md:max-w-[220px] lg:max-w-none">
-                          <span className="block truncate" title={site.business_name}>{site.business_name}</span>
+                        {/* Business + Email stacked */}
+                        <td className="px-4 md:px-6 py-4">
+                          <p className="font-medium text-gray-900 text-sm leading-snug">{site.business_name}</p>
+                          <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[180px]">{site.email}</p>
                         </td>
-                        <td className="px-4 md:px-6 py-4 text-gray-500 text-xs hidden sm:table-cell">{site.email}</td>
-                        <td className="px-4 md:px-6 py-4 hidden lg:table-cell w-36">
-                          <span className="block font-mono text-xs text-gray-600 truncate" title={site.location_id || ''}>{site.location_id || '—'}</span>
-                        </td>
+
+                        {/* Site URL */}
                         <td className="px-4 md:px-6 py-4">
                           <a
                             href={siteUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline text-xs md:text-sm"
+                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline text-xs"
                           >
                             {site.slug}
-                            <ExternalLink className="w-3 h-3" />
+                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
                           </a>
                         </td>
 
                         {/* Custom Domain — inline editable */}
-                        <td className="px-4 md:px-6 py-4 hidden md:table-cell min-w-[200px]">
+                        <td className="px-4 md:px-6 py-4 hidden md:table-cell min-w-[180px]">
                           {isEditingDomain ? (
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-1.5">
@@ -832,12 +842,14 @@ export default function AgencyAdminPage() {
                           )}
                         </td>
 
+                        {/* Status + Created stacked */}
                         <td className="px-4 md:px-6 py-4">
                           <StatusBadge status={site.status} />
+                          <p className="text-xs text-gray-400 mt-1 whitespace-nowrap">
+                            {new Date(site.created_at).toLocaleDateString()}
+                          </p>
                         </td>
-                        <td className="px-4 md:px-6 py-4 text-gray-500 text-xs whitespace-nowrap hidden md:table-cell">
-                          {new Date(site.created_at).toLocaleDateString()}
-                        </td>
+
                         <td className="px-4 md:px-6 py-4">
                           <ActionsCell row={site} onEditDomain={() => startEditingDomain(site)} />
                         </td>
