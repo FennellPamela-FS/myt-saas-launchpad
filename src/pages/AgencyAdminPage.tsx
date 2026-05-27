@@ -507,17 +507,22 @@ export default function AgencyAdminPage() {
                 {
                   step: '1',
                   title: 'Deploy myt-client-platform to Netlify',
-                  detail: 'Push the latest branch. The edge function (netlify/edge-functions/custom-domain.ts) is inert until Netlify builds it. Check the deploy log for "Edge Functions: custom-domain" to confirm it\'s active.',
+                  detail: 'Push the main branch to GitHub — Netlify auto-deploys. Confirm the build passes in the Netlify deploy log (look for "Site is live"). The netlify/edge-functions/custom-domain.ts file is a simple pass-through and requires no configuration.',
                 },
                 {
                   step: '2',
-                  title: 'Confirm Supabase env vars are set in Netlify',
-                  detail: 'In the Netlify dashboard → myt-client-platform → Site configuration → Environment variables, verify VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are present. The edge function reads these at runtime to look up custom domains.',
+                  title: 'Set Supabase environment variables in Netlify',
+                  detail: 'Netlify dashboard → myt-client-platform → Site configuration → Environment variables. Verify VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are present. The React SPA reads these to query Supabase for hostname-based routing.',
                 },
                 {
                   step: '3',
+                  title: 'Configure Supabase Auth URL settings',
+                  detail: 'Supabase dashboard → Authentication → URL Configuration.\n  • Site URL: https://myt-client-platform.netlify.app\n  • Redirect URLs (minimum required):\n    – https://*.netlify.app/**\n    – https://myt-client-platform.netlify.app/admin/callback\n    – http://localhost:5173/**\n  All magic links route through the platform callback — no per-client entries needed.',
+                },
+                {
+                  step: '4',
                   title: 'Deploy myt-saas-launchpad to Netlify',
-                  detail: 'Push the Agency Command Center changes so the domain editing column is live for your team.',
+                  detail: 'Push the Agency Command Center changes so the Sites tab, Domain Runbook, and domain editing tools are live for your team.',
                 },
               ].map(item => (
                 <div key={item.step} className="flex gap-4 px-5 py-4">
@@ -526,7 +531,7 @@ export default function AgencyAdminPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-900">{item.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{item.detail}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed whitespace-pre-line">{item.detail}</p>
                   </div>
                 </div>
               ))}
@@ -545,32 +550,32 @@ export default function AgencyAdminPage() {
                 {
                   step: '1',
                   who: 'Client',
-                  title: 'Client adds CNAME record at their DNS registrar',
-                  detail: 'GoDaddy, Namecheap, Cloudflare, Google Domains, etc. They should add:\n  Type: CNAME\n  Name: www\n  Value: myt-client-platform.netlify.app\n  TTL: Auto (or 3600)',
+                  title: 'Client adds DNS record at their registrar',
+                  detail: 'For www subdomain (recommended):\n  Type: CNAME  |  Name: www  |  Value: myt-client-platform.netlify.app\n\nFor apex/bare domain (e.g. joesplumbing.com):\n  Type: A  |  Name: @  |  Value: 75.2.60.5\n\nTTL: Auto or 3600. Most registrars: GoDaddy, Namecheap, Cloudflare, Hover.',
                 },
                 {
                   step: '2',
                   who: 'Agency',
                   title: 'Set the domain in Agency Command Center',
-                  detail: 'On the Sites tab, hover the client\'s row and click the pencil icon in the Custom Domain column (or use Actions → Edit Domain). Enter the exact hostname they\'re pointing — e.g. www.joesplumbing.com. Save.',
+                  detail: 'On the Sites tab, click the pencil icon in the Custom Domain column for the client\'s row. Enter the exact hostname — e.g. www.joesplumbing.com. Save. This is what the React SPA matches against to identify the site.',
                 },
                 {
                   step: '3',
                   who: 'Agency',
-                  title: 'Add the domain as an alias in Netlify',
-                  detail: 'Netlify dashboard → myt-client-platform → Site configuration → Domain management → Add domain alias. Enter the same hostname (www.joesplumbing.com). Netlify will verify and provision an SSL cert automatically.',
+                  title: 'Add the domain alias in Netlify',
+                  detail: 'Netlify dashboard → myt-client-platform → Domain management → Add domain alias. Enter the same hostname. Netlify verifies DNS and provisions an SSL/TLS certificate automatically via Let\'s Encrypt.',
                 },
                 {
                   step: '4',
                   who: 'Wait',
-                  title: 'DNS propagation (up to 48 hours, usually under 1 hour)',
-                  detail: 'Use dnschecker.org to verify the CNAME is resolving globally. Once green, the site will serve from the custom domain. The edge function handles the routing — no code changes needed.',
+                  title: 'DNS propagation (up to 48 h, usually < 1 h)',
+                  detail: 'Use dnschecker.org to verify the record is resolving globally. The Netlify SSL cert will show "Your project has HTTPS enabled ✓" once DNS is verified.',
                 },
                 {
                   step: '5',
                   who: 'Verify',
-                  title: 'Visit the custom domain to confirm',
-                  detail: 'Navigate to https://www.joesplumbing.com — you should see the client\'s site. The browser URL stays on their domain. /admin on the custom domain also works.',
+                  title: 'Test the site and admin login',
+                  detail: 'Visit https://www.joesplumbing.com — the client\'s site should load. The browser URL stays clean on their domain with no /site/ path.\n\nTest admin: go to https://www.joesplumbing.com/admin/login, enter the site\'s registered email, click the magic link — the client should land at /admin on their domain.',
                 },
               ].map(item => (
                 <div key={item.step} className="flex gap-4 px-5 py-4">
@@ -596,26 +601,28 @@ export default function AgencyAdminPage() {
           {/* DNS record reference */}
           <section>
             <h2 className="text-base font-semibold text-gray-900 mb-4">DNS Record Reference</h2>
-            <div className="bg-gray-900 rounded-xl p-5 font-mono text-xs space-y-3 text-gray-100">
-              <div className="flex gap-4 items-center">
-                <span className="text-gray-500 w-20">Type</span>
-                <span>CNAME</span>
+            <div className="bg-gray-900 rounded-xl p-5 font-mono text-xs space-y-4 text-gray-100">
+              <div>
+                <p className="text-gray-400 text-xs mb-2 uppercase tracking-wider">www subdomain (preferred)</p>
+                <div className="space-y-2">
+                  <div className="flex gap-4"><span className="text-gray-500 w-24">Type</span><span>CNAME</span></div>
+                  <div className="flex gap-4"><span className="text-gray-500 w-24">Name / Host</span><span>www</span></div>
+                  <div className="flex gap-4"><span className="text-gray-500 w-24">Points to</span><span className="text-emerald-400">myt-client-platform.netlify.app</span></div>
+                  <div className="flex gap-4"><span className="text-gray-500 w-24">TTL</span><span>3600 (or Auto)</span></div>
+                </div>
               </div>
-              <div className="flex gap-4 items-center">
-                <span className="text-gray-500 w-20">Name / Host</span>
-                <span>www</span>
-              </div>
-              <div className="flex gap-4 items-center">
-                <span className="text-gray-500 w-20">Value / Points to</span>
-                <span className="text-emerald-400">myt-client-platform.netlify.app</span>
-              </div>
-              <div className="flex gap-4 items-center">
-                <span className="text-gray-500 w-20">TTL</span>
-                <span>3600 (or Auto)</span>
+              <div className="border-t border-gray-700 pt-4">
+                <p className="text-gray-400 text-xs mb-2 uppercase tracking-wider">Apex / bare domain</p>
+                <div className="space-y-2">
+                  <div className="flex gap-4"><span className="text-gray-500 w-24">Type</span><span>A</span></div>
+                  <div className="flex gap-4"><span className="text-gray-500 w-24">Name / Host</span><span>@ (or blank)</span></div>
+                  <div className="flex gap-4"><span className="text-gray-500 w-24">Points to</span><span className="text-emerald-400">75.2.60.5</span></div>
+                  <div className="flex gap-4"><span className="text-gray-500 w-24">TTL</span><span>3600 (or Auto)</span></div>
+                </div>
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              If the client wants the bare domain (joesplumbing.com without www) to also work, they should set up a redirect from the bare domain to www at their DNS provider.
+              Most clients use www. For apex domains, use the A record above (Netlify's load balancer IP). Add both if the client wants joesplumbing.com and www.joesplumbing.com — register each as a separate Netlify domain alias.
             </p>
           </section>
 
@@ -629,23 +636,23 @@ export default function AgencyAdminPage() {
               </div>
               <div className="flex items-start gap-3 text-sm">
                 <ArrowRight className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                <p className="text-gray-600">DNS resolves to Netlify via the CNAME record</p>
+                <p className="text-gray-600">DNS resolves to Netlify via CNAME / A record → Netlify serves the <span className="font-mono text-gray-900">myt-client-platform</span> SPA</p>
               </div>
               <div className="flex items-start gap-3 text-sm">
                 <ArrowRight className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                <p className="text-gray-600">Netlify Edge Function intercepts the request, reads the <span className="font-mono text-gray-900">Host</span> header</p>
+                <p className="text-gray-600">React app reads <span className="font-mono text-gray-900">window.location.hostname</span>, recognises it is not a platform host</p>
               </div>
               <div className="flex items-start gap-3 text-sm">
                 <ArrowRight className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                <p className="text-gray-600">Queries Supabase: <span className="font-mono text-gray-900">custom_domain = 'www.joesplumbing.com'</span> → returns slug</p>
+                <p className="text-gray-600">Queries Supabase: <span className="font-mono text-gray-900">custom_domain = 'www.joesplumbing.com'</span> → returns the site slug</p>
               </div>
               <div className="flex items-start gap-3 text-sm">
                 <ArrowRight className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                <p className="text-gray-600">Rewrites request to <span className="font-mono text-gray-900">/site/joesplumbing</span> — browser URL stays on the custom domain</p>
+                <p className="text-gray-600">Site renders at <span className="font-mono text-gray-900">www.joesplumbing.com/</span> — no internal <span className="font-mono text-gray-900">/site/:slug</span> path is ever exposed in the browser</p>
               </div>
               <div className="flex items-start gap-3 text-sm">
                 <ArrowRight className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                <p className="text-gray-600">SPA renders the site. The Settings FAB at <span className="font-mono text-gray-900">/admin</span> on the custom domain also routes correctly.</p>
+                <p className="text-gray-600"><span className="font-mono text-gray-900">/admin/login</span> on the custom domain sends a magic link. Auth tokens relay through <span className="font-mono text-gray-900">myt-client-platform.netlify.app/admin/callback</span> and are forwarded back — no per-client Supabase redirect URL entries required.</p>
               </div>
             </div>
           </section>
