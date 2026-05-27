@@ -394,13 +394,26 @@ async function triggerNetlifyBuild(locationId: string, theme: string): Promise<v
   });
 }
 
+// ─── CORS headers (required for browser-originated calls from Agency Admin) ──
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+  });
+}
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: { 'Access-Control-Allow-Origin': '*' },
-    });
+    return new Response('ok', { headers: CORS_HEADERS });
   }
 
   let email = '';
@@ -412,10 +425,7 @@ serve(async (req: Request) => {
 
     if (!parsed) {
       console.error('GHL payload missing email or locationId', JSON.stringify(body));
-      return new Response(JSON.stringify({ error: 'Missing email or locationId in payload' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return json({ error: 'Missing email or locationId in payload' }, 400);
     }
 
     const { email: parsedEmail, locationId, contactId } = parsed;
@@ -430,10 +440,7 @@ serve(async (req: Request) => {
 
     if (fetchError || !deployment) {
       console.error(`No pending deployment found for email: ${email}`);
-      return new Response(JSON.stringify({ error: 'No pending deployment found for this email' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return json({ error: 'No pending deployment found for this email' }, 400);
     }
 
     // Mark as processing to prevent duplicate runs
@@ -474,10 +481,7 @@ serve(async (req: Request) => {
 
     console.log(`Provisioning complete for ${email} → location ${locationId}`);
 
-    return new Response(JSON.stringify({ success: true, locationId }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return json({ success: true, locationId });
   } catch (err) {
     console.error('ghl-saas-provisioner error:', err);
 
@@ -492,9 +496,6 @@ serve(async (req: Request) => {
         .eq('email', email);
     }
 
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : 'Unexpected error' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return json({ error: err instanceof Error ? err.message : 'Unexpected error' }, 500);
   }
 });
