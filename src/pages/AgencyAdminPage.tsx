@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle, UserPlus, Link2 } from 'lucide-react';
+import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle, UserPlus, Link2, Zap, Clock } from 'lucide-react';
 
 type SiteRow = {
   id: string;
@@ -11,6 +11,16 @@ type SiteRow = {
   custom_domain: string | null;
   status: 'active' | 'inactive' | 'pending';
   created_at: string;
+};
+
+type QueueRow = {
+  email: string;
+  location_id: string | null;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  industry_category: string;
+  discovery_data: { businessName?: string } | null;
+  created_at: string;
+  error_message?: string | null;
 };
 
 const AGENCY_ADMINS = (import.meta.env.VITE_AGENCY_ADMINS as string ?? '')
@@ -180,10 +190,55 @@ export default function AgencyAdminPage() {
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(
     () => sessionStorage.getItem(SESSION_KEY)
   );
-  const [activeTab, setActiveTab] = useState<'sites' | 'runbook'>('sites');
+  const [activeTab, setActiveTab] = useState<'sites' | 'queue' | 'runbook'>('sites');
   const [sites, setSites]           = useState<SiteRow[]>([]);
   const [loading, setLoading]       = useState(false);
   const [fetchError, setFetchError] = useState('');
+
+  // Pending deployment queue
+  const [queue, setQueue]           = useState<QueueRow[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState('');
+  const [provisioning, setProvisioning] = useState<Record<string, 'running' | 'done' | 'error'>>({});
+
+  async function fetchQueue() {
+    setQueueLoading(true);
+    setQueueError('');
+    const { data, error } = await supabase
+      .from('pending_saas_deployments')
+      .select('email, location_id, status, industry_category, discovery_data, created_at, error_message')
+      .not('status', 'eq', 'completed')
+      .order('created_at', { ascending: false });
+
+    if (error) setQueueError(error.message);
+    else setQueue((data ?? []) as QueueRow[]);
+    setQueueLoading(false);
+  }
+
+  async function triggerProvisioner(row: QueueRow) {
+    if (!row.location_id) return;
+    setProvisioning(p => ({ ...p, [row.email]: 'running' }));
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ghl-saas-provisioner`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          contact: { email: row.email },
+          location: { id: row.location_id },
+        }),
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      setProvisioning(p => ({ ...p, [row.email]: 'done' }));
+      setTimeout(() => fetchQueue(), 2000);
+    } catch (err) {
+      console.error('[provision]', err);
+      setProvisioning(p => ({ ...p, [row.email]: 'error' }));
+    }
+  }
 
   // Enroll existing client panel
   const [showEnroll, setShowEnroll]         = useState(false);
@@ -228,7 +283,7 @@ export default function AgencyAdminPage() {
   }
 
   useEffect(() => {
-    if (verifiedEmail) fetchSites();
+    if (verifiedEmail) { fetchSites(); fetchQueue(); }
   }, [verifiedEmail]);
 
   useEffect(() => {
@@ -291,13 +346,13 @@ export default function AgencyAdminPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {activeTab === 'sites' && (
+              {(activeTab === 'sites' || activeTab === 'queue') && (
                 <button
-                  onClick={fetchSites}
-                  disabled={loading}
+                  onClick={activeTab === 'sites' ? fetchSites : fetchQueue}
+                  disabled={activeTab === 'sites' ? loading : queueLoading}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-gray-200 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${(loading || queueLoading) ? 'animate-spin' : ''}`} />
                   Refresh
                 </button>
               )}
@@ -312,8 +367,9 @@ export default function AgencyAdminPage() {
           {/* Tab nav */}
           <div className="flex gap-1 -mb-px">
             {([
-              { id: 'sites',   label: 'Client Sites', icon: Server  },
-              { id: 'runbook', label: 'Domain Runbook', icon: BookOpen },
+              { id: 'sites',   label: 'Client Sites',       icon: Server   },
+              { id: 'queue',   label: 'Provisioning Queue',  icon: Clock    },
+              { id: 'runbook', label: 'Domain Runbook',      icon: BookOpen },
             ] as const).map(tab => (
               <button
                 key={tab.id}
@@ -331,6 +387,95 @@ export default function AgencyAdminPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Provisioning Queue tab ──────────────────────────────────────── */}
+      {activeTab === 'queue' && (
+        <div className="max-w-5xl mx-auto px-6 py-8">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Pending &amp; Failed Deployments</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Rows that never completed provisioning — trigger manually if stuck</p>
+            </div>
+
+            {queueError ? (
+              <div className="p-6 text-sm text-red-600">{queueError}</div>
+            ) : queueLoading ? (
+              <div className="flex items-center justify-center p-16">
+                <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : queue.length === 0 ? (
+              <div className="p-16 text-center text-sm text-gray-400">No pending deployments.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50/60">
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Email</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business Name</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Location ID</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Industry</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Created</th>
+                      <th className="px-6 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {queue.map(row => {
+                      const state = provisioning[row.email];
+                      const canProvision = !!row.location_id && row.status !== 'processing';
+                      return (
+                        <tr key={row.email} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-6 py-4 text-xs text-gray-600">{row.email}</td>
+                          <td className="px-6 py-4 font-medium text-gray-900">
+                            {row.discovery_data?.businessName ?? <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="px-6 py-4 font-mono text-xs text-gray-600">{row.location_id ?? <span className="text-gray-400">—</span>}</td>
+                          <td className="px-6 py-4 text-xs text-gray-500">{row.industry_category}</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                              row.status === 'pending'    ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                              row.status === 'processing' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                              row.status === 'failed'     ? 'bg-red-100 text-red-800 border-red-200' :
+                              'bg-gray-100 text-gray-700 border-gray-200'
+                            }`}>
+                              {row.status}
+                            </span>
+                            {row.error_message && (
+                              <p className="text-xs text-red-500 mt-1 max-w-xs truncate" title={row.error_message}>
+                                {row.error_message}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-gray-500 whitespace-nowrap">
+                            {new Date(row.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => triggerProvisioner(row)}
+                              disabled={!canProvision || state === 'running'}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                            >
+                              {state === 'running' ? (
+                                <><RefreshCw className="w-3 h-3 animate-spin" /> Running…</>
+                              ) : state === 'done' ? (
+                                <><Check className="w-3 h-3 text-green-400" /> Triggered</>
+                              ) : state === 'error' ? (
+                                <><AlertCircle className="w-3 h-3 text-red-400" /> Failed</>
+                              ) : (
+                                <><Zap className="w-3 h-3" /> Provision Now</>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Runbook tab ──────────────────────────────────────────────────── */}
       {activeTab === 'runbook' && (
