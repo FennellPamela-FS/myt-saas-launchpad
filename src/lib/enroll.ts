@@ -17,11 +17,13 @@ export async function handleExistingEnroll({
   locationId,
   discoveryData,
   themeSelection,
+  cohort,
 }: {
   email: string;
   locationId: string;
   discoveryData: DiscoveryData;
   themeSelection: ThemeSelection;
+  cohort?: string | null;
 }): Promise<EnrollError | EnrollSuccess> {
   if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { code: 'MISSING_EMAIL' };
@@ -47,19 +49,19 @@ export async function handleExistingEnroll({
   if (existing?.status === 'processing') return { code: 'PROVISIONING_IN_PROGRESS' };
 
   // Upsert with locationId pre-populated — provisioner can run immediately
+  const payload: Record<string, unknown> = {
+    email:             email.trim().toLowerCase(),
+    industry_category: discoveryData.industryCategory as IndustryCategory,
+    discovery_data:    discoveryData,
+    theme:             themeSelection,
+    location_id:       locationId.trim(),
+    status:            'pending',
+  };
+  if (cohort) payload.cohort = cohort;
+
   const { error } = await supabase
     .from('pending_saas_deployments')
-    .upsert(
-      {
-        email: email.trim().toLowerCase(),
-        industry_category: discoveryData.industryCategory as IndustryCategory,
-        discovery_data: discoveryData,
-        theme: themeSelection,
-        location_id: locationId.trim(),
-        status: 'pending',
-      },
-      { onConflict: 'email' }
-    );
+    .upsert(payload, { onConflict: 'email' });
 
   if (error) {
     console.error('[enroll] DB upsert failed:', error.message);

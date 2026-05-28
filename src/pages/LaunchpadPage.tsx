@@ -83,6 +83,7 @@ type PendingCheckout = { checkoutUrl: string; email: string; businessName: strin
 const LaunchpadPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const enrollLocationId = searchParams.get('enroll') ?? null;
+  const enrollCohort     = searchParams.get('cohort') ?? null;
 
   const [currentStep, setCurrentStep] = useState(1);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -288,6 +289,7 @@ const LaunchpadPage: React.FC = () => {
       locationId: enrollLocationId,
       discoveryData,
       themeSelection,
+      cohort: enrollCohort,
     });
     setCheckoutLoading(false);
 
