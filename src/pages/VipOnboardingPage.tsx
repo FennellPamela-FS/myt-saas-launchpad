@@ -6,7 +6,8 @@ import { supabase } from '../lib/supabaseClient';
 // ─── Cohort config ────────────────────────────────────────────────────────────
 
 const COHORT_CONFIG: Record<string, { displayName: string; seatLimit: number }> = {
-  inspire_dmv: { displayName: 'Inspire DMV', seatLimit: 13 },  // 10 prepaid + 3 rollover seats
+  inspire_dmv:     { displayName: 'Inspire DMV',     seatLimit: 13 },  // 10 prepaid + 3 rollover seats
+  better_business: { displayName: 'Better Business', seatLimit: 30 },
 };
 
 // ─── Industry options ─────────────────────────────────────────────────────────

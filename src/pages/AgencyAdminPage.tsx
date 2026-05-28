@@ -36,7 +36,8 @@ type CohortRow = {
 
 // Known cohorts with display config — add new cohorts here
 const COHORT_REGISTRY: Record<string, { displayName: string; seatLimit: number; color: string }> = {
-  inspire_dmv: { displayName: 'Inspire DMV', seatLimit: 13, color: 'amber' },
+  inspire_dmv:     { displayName: 'Inspire DMV',     seatLimit: 13, color: 'amber' },
+  better_business: { displayName: 'Better Business', seatLimit: 30, color: 'blue'  },
 };
 
 const AGENCY_ADMINS = (import.meta.env.VITE_AGENCY_ADMINS as string ?? '')

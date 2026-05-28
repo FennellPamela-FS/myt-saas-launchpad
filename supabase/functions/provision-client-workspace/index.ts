@@ -30,7 +30,8 @@ type RequestPayload = {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const COHORT_SEAT_LIMITS: Record<string, number> = {
-  inspire_dmv: 13,   // 10 prepaid + 3 rollover seats from previous cohort
+  inspire_dmv:     13,  // 10 prepaid + 3 rollover seats from previous cohort
+  better_business: 30,
 };
 
 const GHL_LOCATIONS_API = 'https://services.leadconnectorhq.com/locations/';
