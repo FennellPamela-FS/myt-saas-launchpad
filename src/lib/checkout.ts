@@ -97,10 +97,13 @@ export async function handleSaaSCheckout({
     return { code: 'DB_ERROR', message: error.message };
   }
 
-  // Build the checkout URL with pre-fill params
+  // Build the checkout URL.
+  // client_reference_id is set to the email so the Stripe webhook can
+  // reliably identify the user even when Stripe Link swaps the customer email.
   const url = new URL(checkoutBase);
-  url.searchParams.set('email', email.trim().toLowerCase());
-  url.searchParams.set('industry', discoveryData.industryCategory);
+  url.searchParams.set('prefilled_email',     email.trim().toLowerCase());
+  url.searchParams.set('client_reference_id', email.trim().toLowerCase());
+  url.searchParams.set('industry',            discoveryData.industryCategory);
 
   return { checkoutUrl: url.toString(), email: email.trim().toLowerCase() };
 }

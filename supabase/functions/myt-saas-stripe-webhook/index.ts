@@ -1,34 +1,43 @@
 // Supabase Edge Function: myt-saas-stripe-webhook
 //
-// Receives Stripe checkout.session.completed events after a test or live
-// payment, then triggers the ghl-saas-provisioner to generate the client
-// site — same pipeline as the GHL Order Submitted workflow, but via Stripe.
+// Receives Stripe checkout.session.completed events and owns the full
+// provisioning pipeline server-side — no browser return URL required.
+//
+// Flow:
+//   1  Verify Stripe signature
+//   2  Extract email from client_reference_id (reliable) or customer_email fallback
+//   3  Look up pending_saas_deployments record
+//   4  If location_id is missing → create GHL sub-account → save locationId
+//   5  Trigger ghl-saas-provisioner → AI copy + client_sites row + Netlify build
+//
+// client_reference_id is set to the user's email by checkout.ts so we can
+// identify the user even when Stripe Link substitutes a different customer email.
 //
 // Deploy: supabase functions deploy myt-saas-stripe-webhook --no-verify-jwt
 //
 // Required Supabase secrets:
 //   STRIPE_WEBHOOK_SECRET  — from Stripe Dashboard → Webhooks → signing secret
+//   GHL_AGENCY_API_KEY     — PIT token with locations:write scope
+//   GHL_COMPANY_ID         — agency company ID
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const supabase = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_URL')              ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
 
-// ─── Stripe signature verification (no SDK needed) ───────────────────────────
+// ─── Stripe signature verification ───────────────────────────────────────────
 
 async function verifyStripeSignature(
   rawBody: string,
   signature: string,
   secret: string
 ): Promise<boolean> {
-  const parts = Object.fromEntries(
-    signature.split(',').map((p) => p.split('=') as [string, string])
-  );
+  const parts   = Object.fromEntries(signature.split(',').map(p => p.split('=') as [string, string]));
   const timestamp = parts['t'];
-  const expected = parts['v1'];
+  const expected  = parts['v1'];
   if (!timestamp || !expected) return false;
 
   const key = await crypto.subtle.importKey(
@@ -38,18 +47,68 @@ async function verifyStripeSignature(
     false,
     ['sign']
   );
-
-  const sigBytes = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(`${timestamp}.${rawBody}`)
-  );
-
-  const computed = Array.from(new Uint8Array(sigBytes))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-
+  const sigBytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${rawBody}`));
+  const computed = Array.from(new Uint8Array(sigBytes)).map(b => b.toString(16).padStart(2, '0')).join('');
   return computed === expected;
+}
+
+// ─── GHL sub-account creation ─────────────────────────────────────────────────
+// Called when payment succeeds but no GHL location exists yet.
+
+async function createGHLSubAccount(
+  email: string,
+  businessName: string
+): Promise<string> {
+  const apiKey    = Deno.env.get('GHL_AGENCY_API_KEY');
+  const companyId = Deno.env.get('GHL_COMPANY_ID');
+
+  if (!apiKey || !companyId) throw new Error('GHL_AGENCY_API_KEY or GHL_COMPANY_ID not configured');
+
+  const res = await fetch('https://services.leadconnectorhq.com/locations/', {
+    method:  'POST',
+    headers: {
+      Authorization:  `Bearer ${apiKey}`,
+      Version:        '2021-07-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      companyId,
+      name:    businessName || email,
+      email,
+      country: 'US',
+      timezone: 'America/New_York',
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`GHL create location failed ${res.status}: ${text}`);
+  }
+
+  const data       = await res.json() as Record<string, unknown>;
+  const locationId = ((data?.location as Record<string, unknown>)?.id ?? data?.id) as string;
+
+  if (!locationId) throw new Error(`GHL response missing locationId: ${JSON.stringify(data)}`);
+  console.log(`GHL sub-account created: ${locationId} for ${email}`);
+  return locationId;
+}
+
+// ─── Provisioner trigger ─────────────────────────────────────────────────────
+
+async function triggerProvisioner(email: string, locationId: string): Promise<unknown> {
+  const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/ghl-saas-provisioner`;
+  const res = await fetch(url, {
+    method:  'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization:  `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+    },
+    body: JSON.stringify({
+      contact:  { email },
+      location: { id: locationId },
+    }),
+  });
+  return res.json();
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
@@ -60,18 +119,16 @@ serve(async (req: Request) => {
   }
 
   try {
-    const rawBody = await req.text();
+    const rawBody        = await req.text();
     const stripeSignature = req.headers.get('stripe-signature') ?? '';
-    const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
+    const webhookSecret   = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
 
-    // Verify signature when secret is configured
     if (webhookSecret) {
       const valid = await verifyStripeSignature(rawBody, stripeSignature, webhookSecret);
       if (!valid) {
         console.error('myt-saas-stripe-webhook: invalid signature');
         return new Response(JSON.stringify({ error: 'Invalid Stripe signature' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
+          status: 400, headers: { 'Content-Type': 'application/json' },
         });
       }
     }
@@ -79,80 +136,73 @@ serve(async (req: Request) => {
     const event = JSON.parse(rawBody);
     console.log(`myt-saas-stripe-webhook: received ${event.type}`);
 
-    // Only handle completed checkouts
     if (event.type !== 'checkout.session.completed') {
       return new Response(JSON.stringify({ received: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        status: 200, headers: { 'Content-Type': 'application/json' },
       });
     }
 
     const session = event.data?.object ?? {};
+
+    // client_reference_id is our email — set by checkout.ts so it survives
+    // Stripe Link substituting a different customer email.
     const email = (
-      session.customer_email ||
-      session.customer_details?.email ||
+      (session.client_reference_id as string) ||
+      (session.customer_email       as string) ||
+      (session.customer_details?.email as string) ||
       ''
     ).toLowerCase().trim();
 
     if (!email) {
-      console.error('myt-saas-stripe-webhook: no email in session');
-      return new Response(JSON.stringify({ error: 'No email found in Stripe session' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
+      console.error('myt-saas-stripe-webhook: no email found in session');
+      return new Response(JSON.stringify({ error: 'No email found' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // Look up the pending deployment for this email
+    console.log(`myt-saas-stripe-webhook: processing payment for ${email}`);
+
+    // ── Look up pending deployment ───────────────────────────────────────────
     const { data: deployment } = await supabase
       .from('pending_saas_deployments')
-      .select('location_id, status')
+      .select('*')
       .eq('email', email)
       .maybeSingle();
 
     if (!deployment) {
       console.error(`myt-saas-stripe-webhook: no pending deployment for ${email}`);
-      return new Response(JSON.stringify({ error: 'No pending deployment found for this email' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
+      return new Response(JSON.stringify({ error: 'No pending deployment found' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
       });
     }
 
     if (deployment.status === 'completed') {
       console.log(`myt-saas-stripe-webhook: already completed for ${email} — skipping`);
       return new Response(JSON.stringify({ success: true, skipped: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        status: 200, headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (!deployment.location_id) {
-      console.error(`myt-saas-stripe-webhook: no location_id for ${email}`);
-      return new Response(JSON.stringify({ error: 'No locationId in pending deployment — use enrollment link first' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    // ── Create GHL sub-account if not yet linked ─────────────────────────────
+    let locationId: string = deployment.location_id ?? '';
+
+    if (!locationId) {
+      console.log(`myt-saas-stripe-webhook: no location_id for ${email} — creating GHL sub-account`);
+      const businessName = (deployment.discovery_data as Record<string, unknown>)?.businessName as string ?? email;
+      locationId = await createGHLSubAccount(email, businessName);
+
+      await supabase
+        .from('pending_saas_deployments')
+        .update({ location_id: locationId })
+        .eq('email', email);
     }
 
-    // Trigger the provisioner server-side (reliable — no browser fire-and-forget)
-    const provisionerUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/ghl-saas-provisioner`;
-    const res = await fetch(provisionerUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-      },
-      body: JSON.stringify({
-        contact: { email },
-        location: { id: deployment.location_id },
-      }),
-    });
-
-    const result = await res.json();
+    // ── Trigger provisioner server-side ─────────────────────────────────────
+    const result = await triggerProvisioner(email, locationId);
     console.log(`myt-saas-stripe-webhook: provisioner result for ${email}:`, JSON.stringify(result));
 
-    return new Response(JSON.stringify({ success: true, provisioner: result }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ success: true, locationId, provisioner: result }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
     });
 
   } catch (err) {

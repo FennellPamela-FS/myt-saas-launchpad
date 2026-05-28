@@ -250,34 +250,70 @@ const LaunchpadPage: React.FC = () => {
     }
   };
 
-  const handleKickstartSubmit = async () => {
+  // Step 1 non-enroll path: validate email + industry then advance.
+  // No Supabase write here — all data is saved at the Review step (step 7).
+  const validateAndAdvance = () => {
+    setCheckoutError(null);
+    if (!userEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) {
+      setCheckoutError('Please enter a valid email address.');
+      return;
+    }
+    if (!discoveryData.industryCategory) {
+      setCheckoutError('Please select an industry category.');
+      return;
+    }
+    handleNext();
+  };
+
+  // Step 7 non-enroll path: save all enriched form data then redirect to Stripe.
+  // The webhook handles GHL sub-account creation + provisioning server-side,
+  // so the browser returning to the success page is optional — not required.
+  const handleFinalCheckout = async () => {
     setCheckoutError(null);
     setCheckoutLoading(true);
-    const result = await handleSaaSCheckout({ email: userEmail, discoveryData, themeSelection, brandingData });
+
+    // Merge multi-step form data into discoveryData so the AI gets richer context
+    const enrichedDiscovery = {
+      ...discoveryData,
+      fullBusinessName: formData.business.businessName || discoveryData.businessName,
+      tagline:          formData.business.tagline,
+      serviceItems:     formData.services.items,
+      contactPhone:     formData.contact.phone,
+      contactEmail:     formData.contact.email || userEmail,
+      socialLinks:      formData.social,
+    };
+
+    const result = await handleSaaSCheckout({
+      email: userEmail,
+      discoveryData: enrichedDiscovery,
+      themeSelection,
+      brandingData,
+    });
     setCheckoutLoading(false);
 
     if ('code' in result) {
       const messages: Record<string, string> = {
-        MISSING_EMAIL: 'Please enter a valid email address.',
-        MISSING_INDUSTRY: 'Please select an industry category.',
-        MISSING_INDUSTRY_OTHER: 'Please describe your industry.',
-        NO_CHECKOUT_URL: 'Checkout is not yet configured. Please contact us.',
-        ALREADY_COMPLETED: 'An account with this email is already active. Please contact support at hello@mytcreative.com if you need help.',
-        PROVISIONING_IN_PROGRESS: 'Your site is currently being set up. Check your email for updates — this usually takes just a few minutes.',
-        DB_ERROR: 'Could not save your information. Please try again.',
+        MISSING_EMAIL:             'Please enter a valid email address.',
+        MISSING_INDUSTRY:          'Please select an industry category.',
+        MISSING_INDUSTRY_OTHER:    'Please describe your industry.',
+        NO_CHECKOUT_URL:           'Checkout is not yet configured. Please contact us.',
+        ALREADY_COMPLETED:         'An account with this email is already active. Contact hello@mytcreative.com.',
+        PROVISIONING_IN_PROGRESS:  'Your site is already being built. Check your email for updates.',
+        DB_ERROR:                  'Could not save your information. Please try again.',
       };
       setCheckoutError(messages[result.code] ?? 'An unexpected error occurred.');
       return;
     }
 
-    // Save to localStorage so returning users can resume checkout
+    // Save to localStorage for recovery, then redirect to Stripe immediately.
+    // Provisioning happens server-side via webhook — no success page required.
     const checkout: PendingCheckout = {
       checkoutUrl: result.checkoutUrl,
-      email: result.email,
+      email:       result.email,
       businessName: discoveryData.businessName,
     };
     localStorage.setItem(CHECKOUT_STORAGE_KEY, JSON.stringify(checkout));
-    setPendingCheckout(checkout);
+    window.location.href = result.checkoutUrl;
   };
 
   const handleEnrollSubmit = async () => {
@@ -322,7 +358,7 @@ const LaunchpadPage: React.FC = () => {
   };
 
   const handleSubmit = () => {
-    console.log('Form submitted:', { discoveryData, formData });
+    // Enroll path only — provisioner already fired in handleEnrollSubmit
     handleNext();
   };
 
@@ -463,14 +499,14 @@ const LaunchpadPage: React.FC = () => {
 
                   {currentStep === 1 ? (
                     <button
-                      onClick={enrollLocationId ? handleEnrollSubmit : handleKickstartSubmit}
+                      onClick={enrollLocationId ? handleEnrollSubmit : validateAndAdvance}
                       disabled={checkoutLoading}
                       className="btn btn-primary flex items-center disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {checkoutLoading ? (
                         <>
                           <Loader2 size={18} className="mr-2 animate-spin" />
-                          {enrollLocationId ? 'Enrolling…' : 'Saving…'}
+                          Enrolling…
                         </>
                       ) : enrollLocationId ? (
                         <>
@@ -486,11 +522,26 @@ const LaunchpadPage: React.FC = () => {
                     </button>
                   ) : isLastFormStep ? (
                     <button
-                      onClick={handleSubmit}
-                      className="btn btn-primary flex items-center"
+                      onClick={enrollLocationId ? handleSubmit : handleFinalCheckout}
+                      disabled={checkoutLoading}
+                      className="btn btn-primary flex items-center disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      Personalize & Launch My Site
-                      <ChevronRight size={18} className="ml-1" />
+                      {checkoutLoading ? (
+                        <>
+                          <Loader2 size={18} className="mr-2 animate-spin" />
+                          Saving & Redirecting…
+                        </>
+                      ) : enrollLocationId ? (
+                        <>
+                          Complete Enrollment
+                          <ChevronRight size={18} className="ml-1" />
+                        </>
+                      ) : (
+                        <>
+                          Launch My Site &amp; Pay
+                          <ChevronRight size={18} className="ml-1" />
+                        </>
+                      )}
                     </button>
                   ) : (
                     <button
