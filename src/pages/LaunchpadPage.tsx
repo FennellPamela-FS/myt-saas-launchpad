@@ -12,6 +12,7 @@ import ReviewSubmit from '../components/features/launchpad/ReviewSubmit';
 import { useLaunchpadStore } from '../store/launchpadStore';
 import { handleSaaSCheckout } from '../lib/checkout';
 import { handleExistingEnroll } from '../lib/enroll';
+import { supabase } from '../lib/supabaseClient';
 
 // Define types for the form data
 export type BusinessData = {
@@ -162,10 +163,44 @@ const LaunchpadPage: React.FC = () => {
     window.scrollTo(0, 0);
   }, []);
 
+  // Fire-and-forget incremental save — never blocks the UI.
+  // Called at step 1 validation and after each subsequent step advance.
+  const autoSave = (stepFormData?: Partial<LaunchpadFormData>) => {
+    const email = userEmail.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+
+    const merged = stepFormData ?? formData;
+    const enriched = {
+      ...discoveryData,
+      ...(merged.business?.businessName ? { fullBusinessName: merged.business.businessName, tagline: merged.business.tagline } : {}),
+      ...(merged.contact?.phone        ? { contactPhone: merged.contact.phone }   : {}),
+      ...(merged.contact?.email        ? { contactEmail: merged.contact.email }   : {}),
+      ...(merged.services?.items?.length ? { serviceItems: merged.services.items } : {}),
+      ...(merged.social?.instagram || merged.social?.facebook ? { socialLinks: merged.social } : {}),
+    };
+
+    const payload: Record<string, unknown> = {
+      email,
+      industry_category: discoveryData.industryCategory || 'other',
+      discovery_data:    enriched,
+      theme:             themeSelection,
+      status:            'pending',
+    };
+    if (enrollCohort)     payload.cohort      = enrollCohort;
+    if (enrollLocationId) payload.location_id = enrollLocationId;
+
+    supabase
+      .from('pending_saas_deployments')
+      .upsert(payload, { onConflict: 'email' })
+      .then(({ error }) => { if (error) console.warn('[autoSave]', error.message); });
+  };
+
   const handleNext = () => {
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
       window.scrollTo(0, 0);
+      // Persist accumulated data after each step advance (steps 2+)
+      if (currentStep >= 2) autoSave();
     }
   };
 
@@ -250,8 +285,8 @@ const LaunchpadPage: React.FC = () => {
     }
   };
 
-  // Step 1 non-enroll path: validate email + industry then advance.
-  // No Supabase write here — all data is saved at the Review step (step 7).
+  // Step 1 non-enroll path: validate then fire an initial DB write before advancing.
+  // Captures email + industry immediately so we never fully lose the user.
   const validateAndAdvance = () => {
     setCheckoutError(null);
     if (!userEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) {
@@ -262,6 +297,7 @@ const LaunchpadPage: React.FC = () => {
       setCheckoutError('Please select an industry category.');
       return;
     }
+    autoSave();   // fire-and-forget — saves email + industry + kickstart answers
     handleNext();
   };
 
@@ -530,6 +566,11 @@ const LaunchpadPage: React.FC = () => {
                         <>
                           <Loader2 size={18} className="mr-2 animate-spin" />
                           Saving & Redirecting…
+                        </>
+                      ) : enrollCohort ? (
+                        <>
+                          Enroll &amp; Launch My Site
+                          <ChevronRight size={18} className="ml-1" />
                         </>
                       ) : enrollLocationId ? (
                         <>
