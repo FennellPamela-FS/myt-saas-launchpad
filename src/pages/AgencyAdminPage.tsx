@@ -15,6 +15,7 @@ type SiteRow = {
 
 type QueueRow = {
   email: string;
+  alt_email: string | null;
   location_id: string | null;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   industry_category: string;
@@ -236,6 +237,56 @@ export default function AgencyAdminPage() {
   const [locIdDraft, setLocIdDraft]           = useState('');
   const [locIdSaving, setLocIdSaving]         = useState(false);
 
+  // Inline primary email editing
+  const [editingEmailRow, setEditingEmailRow] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft]           = useState('');
+  const [emailSaving, setEmailSaving]         = useState(false);
+  const [emailConflict, setEmailConflict]     = useState(false);
+
+  async function saveQueueEmail(oldEmail: string) {
+    const newEmail = emailDraft.trim().toLowerCase();
+    if (!newEmail || newEmail === oldEmail) { setEditingEmailRow(null); return; }
+    setEmailConflict(false);
+    setEmailSaving(true);
+
+    // Guard: don't overwrite an existing record
+    const { data: existing } = await supabase
+      .from('pending_saas_deployments')
+      .select('email')
+      .eq('email', newEmail)
+      .maybeSingle();
+
+    if (existing) {
+      setEmailSaving(false);
+      setEmailConflict(true);
+      return;
+    }
+
+    await supabase.from('pending_saas_deployments').update({ email: newEmail }).eq('email', oldEmail);
+    // Keep client_sites_saas in sync if a live site already exists
+    await supabase.from('client_sites_saas').update({ email: newEmail }).eq('email', oldEmail);
+
+    setEmailSaving(false);
+    setEditingEmailRow(null);
+    setEmailDraft('');
+    fetchQueue();
+  }
+
+  // Inline alt email editing
+  const [editingAltRow, setEditingAltRow] = useState<string | null>(null);
+  const [altEmailDraft, setAltEmailDraft] = useState('');
+  const [altEmailSaving, setAltEmailSaving] = useState(false);
+
+  async function saveAltEmail(email: string) {
+    const alt = altEmailDraft.trim().toLowerCase() || null;
+    setAltEmailSaving(true);
+    await supabase.from('pending_saas_deployments').update({ alt_email: alt }).eq('email', email);
+    setAltEmailSaving(false);
+    setEditingAltRow(null);
+    setAltEmailDraft('');
+    fetchQueue();
+  }
+
   async function saveQueueLocationId(email: string) {
     const cleaned = locIdDraft.trim();
     if (!cleaned) return;
@@ -277,7 +328,7 @@ export default function AgencyAdminPage() {
     setQueueError('');
     const { data, error } = await supabase
       .from('pending_saas_deployments')
-      .select('email, location_id, status, industry_category, discovery_data, created_at, error_message')
+      .select('email, alt_email, location_id, status, industry_category, discovery_data, created_at, error_message')
       .not('status', 'eq', 'completed')
       .order('created_at', { ascending: false });
 
@@ -500,7 +551,72 @@ export default function AgencyAdminPage() {
                           <td className="px-4 md:px-6 py-4 font-medium text-gray-900 text-sm">
                             {row.discovery_data?.businessName ?? <span className="text-gray-400">—</span>}
                           </td>
-                          <td className="px-4 md:px-6 py-4 text-xs text-gray-600 hidden sm:table-cell">{row.email}</td>
+                          <td className="px-4 md:px-6 py-4 hidden sm:table-cell">
+                            {/* Primary email */}
+                            {editingEmailRow === row.email ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    autoFocus
+                                    type="email"
+                                    value={emailDraft}
+                                    onChange={e => { setEmailDraft(e.target.value); setEmailConflict(false); }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') saveQueueEmail(row.email);
+                                      if (e.key === 'Escape') { setEditingEmailRow(null); setEmailDraft(''); setEmailConflict(false); }
+                                    }}
+                                    placeholder="new@email.com"
+                                    className="w-44 px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-900"
+                                  />
+                                  <button onClick={() => saveQueueEmail(row.email)} disabled={emailSaving || !emailDraft.trim()} className="px-2 py-1 text-xs bg-gray-900 text-white rounded-md disabled:opacity-40 hover:bg-gray-700">{emailSaving ? '…' : 'Save'}</button>
+                                  <button onClick={() => { setEditingEmailRow(null); setEmailDraft(''); setEmailConflict(false); }} className="px-2 py-1 text-xs text-gray-500 hover:text-gray-800">✕</button>
+                                </div>
+                                {emailConflict && <p className="text-xs text-red-500">That email already has a record.</p>}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 group">
+                                <span className="text-xs text-gray-600">{row.email}</span>
+                                <button onClick={() => { setEditingEmailRow(row.email); setEmailDraft(row.email); }} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Pencil className="w-3 h-3 text-gray-400 hover:text-gray-700" />
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Alt email */}
+                            {editingAltRow === row.email ? (
+                              <div className="flex items-center gap-1 mt-1">
+                                <input
+                                  autoFocus
+                                  type="email"
+                                  value={altEmailDraft}
+                                  onChange={e => setAltEmailDraft(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') saveAltEmail(row.email);
+                                    if (e.key === 'Escape') { setEditingAltRow(null); setAltEmailDraft(''); }
+                                  }}
+                                  placeholder="alt@email.com"
+                                  className="w-40 px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-900"
+                                />
+                                <button onClick={() => saveAltEmail(row.email)} disabled={altEmailSaving} className="px-2 py-1 text-xs bg-gray-900 text-white rounded-md disabled:opacity-40 hover:bg-gray-700">{altEmailSaving ? '…' : 'Save'}</button>
+                                <button onClick={() => { setEditingAltRow(null); setAltEmailDraft(''); }} className="px-2 py-1 text-xs text-gray-500 hover:text-gray-800">✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 mt-0.5 group">
+                                {row.alt_email ? (
+                                  <>
+                                    <span className="text-xs text-gray-400 italic">{row.alt_email}</span>
+                                    <button onClick={() => { setEditingAltRow(row.email); setAltEmailDraft(row.alt_email ?? ''); }} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Pencil className="w-3 h-3 text-gray-400 hover:text-gray-700" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button onClick={() => { setEditingAltRow(row.email); setAltEmailDraft(''); }} className="text-xs text-blue-500 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    + alt email
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
                           <td className="px-4 md:px-6 py-4 hidden md:table-cell">
                             {editingLocEmail === row.email ? (
                               <div className="flex items-center gap-1">

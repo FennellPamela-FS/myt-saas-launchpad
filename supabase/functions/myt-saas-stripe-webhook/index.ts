@@ -163,43 +163,58 @@ serve(async (req: Request) => {
     console.log(`myt-saas-stripe-webhook: processing payment for ${email}`);
 
     // ── Look up pending deployment ───────────────────────────────────────────
-    const { data: deployment } = await supabase
+    // Lookup order: email → alt_email
+    // This handles users who signed up with one email and paid with another.
+    let { data: deployment } = await supabase
       .from('pending_saas_deployments')
       .select('*')
       .eq('email', email)
       .maybeSingle();
 
     if (!deployment) {
-      console.error(`myt-saas-stripe-webhook: no pending deployment for ${email}`);
+      console.log(`myt-saas-stripe-webhook: no match on email, trying alt_email for ${email}`);
+      const { data: altMatch } = await supabase
+        .from('pending_saas_deployments')
+        .select('*')
+        .eq('alt_email', email)
+        .maybeSingle();
+      deployment = altMatch;
+    }
+
+    if (!deployment) {
+      console.error(`myt-saas-stripe-webhook: no pending deployment found for ${email} (checked email + alt_email)`);
       return new Response(JSON.stringify({ error: 'No pending deployment found' }), {
         status: 400, headers: { 'Content-Type': 'application/json' },
       });
     }
 
+    // Use the canonical email (the one stored on the record) for all downstream calls
+    const canonicalEmail = (deployment as Record<string, unknown>).email as string;
+
     if (deployment.status === 'completed') {
-      console.log(`myt-saas-stripe-webhook: already completed for ${email} — skipping`);
+      console.log(`myt-saas-stripe-webhook: already completed for ${canonicalEmail} — skipping`);
       return new Response(JSON.stringify({ success: true, skipped: true }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
     }
 
     // ── Create GHL sub-account if not yet linked ─────────────────────────────
-    let locationId: string = deployment.location_id ?? '';
+    let locationId: string = (deployment as Record<string, unknown>).location_id as string ?? '';
 
     if (!locationId) {
-      console.log(`myt-saas-stripe-webhook: no location_id for ${email} — creating GHL sub-account`);
-      const businessName = (deployment.discovery_data as Record<string, unknown>)?.businessName as string ?? email;
-      locationId = await createGHLSubAccount(email, businessName);
+      console.log(`myt-saas-stripe-webhook: no location_id for ${canonicalEmail} — creating GHL sub-account`);
+      const businessName = (deployment.discovery_data as Record<string, unknown>)?.businessName as string ?? canonicalEmail;
+      locationId = await createGHLSubAccount(canonicalEmail, businessName);
 
       await supabase
         .from('pending_saas_deployments')
         .update({ location_id: locationId })
-        .eq('email', email);
+        .eq('email', canonicalEmail);
     }
 
     // ── Trigger provisioner server-side ─────────────────────────────────────
-    const result = await triggerProvisioner(email, locationId);
-    console.log(`myt-saas-stripe-webhook: provisioner result for ${email}:`, JSON.stringify(result));
+    const result = await triggerProvisioner(canonicalEmail, locationId);
+    console.log(`myt-saas-stripe-webhook: provisioner result for ${canonicalEmail}:`, JSON.stringify(result));
 
     return new Response(JSON.stringify({ success: true, locationId, provisioner: result }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
