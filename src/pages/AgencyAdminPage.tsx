@@ -231,6 +231,27 @@ export default function AgencyAdminPage() {
   const [queueError, setQueueError] = useState('');
   const [provisioning, setProvisioning] = useState<Record<string, 'running' | 'done' | 'error'>>({});
 
+  // Inline location ID editing
+  const [editingLocEmail, setEditingLocEmail] = useState<string | null>(null);
+  const [locIdDraft, setLocIdDraft]           = useState('');
+  const [locIdSaving, setLocIdSaving]         = useState(false);
+
+  async function saveQueueLocationId(email: string) {
+    const cleaned = locIdDraft.trim();
+    if (!cleaned) return;
+    setLocIdSaving(true);
+    const { error } = await supabase
+      .from('pending_saas_deployments')
+      .update({ location_id: cleaned })
+      .eq('email', email);
+    setLocIdSaving(false);
+    if (!error) {
+      setEditingLocEmail(null);
+      setLocIdDraft('');
+      fetchQueue();
+    }
+  }
+
   // Cohorts
   const [cohortRows, setCohortRows]         = useState<CohortRow[]>([]);
   const [cohortLoading, setCohortLoading]   = useState(false);
@@ -480,7 +501,45 @@ export default function AgencyAdminPage() {
                             {row.discovery_data?.businessName ?? <span className="text-gray-400">—</span>}
                           </td>
                           <td className="px-4 md:px-6 py-4 text-xs text-gray-600 hidden sm:table-cell">{row.email}</td>
-                          <td className="px-4 md:px-6 py-4 font-mono text-xs text-gray-600 hidden md:table-cell">{row.location_id ?? <span className="text-gray-400">—</span>}</td>
+                          <td className="px-4 md:px-6 py-4 hidden md:table-cell">
+                            {editingLocEmail === row.email ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  autoFocus
+                                  value={locIdDraft}
+                                  onChange={e => setLocIdDraft(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') saveQueueLocationId(row.email);
+                                    if (e.key === 'Escape') { setEditingLocEmail(null); setLocIdDraft(''); }
+                                  }}
+                                  placeholder="Paste location ID…"
+                                  className="w-44 px-2 py-1 text-xs border border-gray-300 rounded-md font-mono focus:outline-none focus:ring-1 focus:ring-gray-900"
+                                />
+                                <button
+                                  onClick={() => saveQueueLocationId(row.email)}
+                                  disabled={locIdSaving || !locIdDraft.trim()}
+                                  className="px-2 py-1 text-xs bg-gray-900 text-white rounded-md disabled:opacity-40 hover:bg-gray-700"
+                                >
+                                  {locIdSaving ? '…' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => { setEditingLocEmail(null); setLocIdDraft(''); }}
+                                  className="px-2 py-1 text-xs text-gray-500 hover:text-gray-800"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : row.location_id ? (
+                              <span className="font-mono text-xs text-gray-600">{row.location_id}</span>
+                            ) : (
+                              <button
+                                onClick={() => { setEditingLocEmail(row.email); setLocIdDraft(''); }}
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                <Pencil className="w-3 h-3" /> Add ID
+                              </button>
+                            )}
+                          </td>
                           <td className="px-4 md:px-6 py-4 text-xs text-gray-500 hidden lg:table-cell">{row.industry_category}</td>
                           <td className="px-4 md:px-6 py-4">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
