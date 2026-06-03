@@ -351,9 +351,70 @@ async function upsertClientSite(
   console.log(`client_sites row ready: /site/${slug}`);
 }
 
-// ─── Step D3: Update GHL contact with site URL + tag ─────────────────────────
-// Writes the live site URL to the contact's website field so the welcome
-// email workflow can reference it via {{contact.website}}.
+// ─── Step D3: Ensure contact exists in Agency HQ, then tag + inject site URL ──
+//
+// VIP / manual-trigger paths provide no contactId — this function searches
+// the master agency account (AGENCY_HQ_LOCATION_ID) by email and creates
+// the contact if it doesn't exist yet, so the welcome workflow always fires.
+
+async function ensureAgencyHQContact(
+  email: string,
+  businessName: string,
+  apiKey: string
+): Promise<string | null> {
+  const agencyHqLocationId = Deno.env.get('AGENCY_HQ_LOCATION_ID');
+  if (!agencyHqLocationId) {
+    console.warn('[provisioner] AGENCY_HQ_LOCATION_ID not set — skipping agency CRM lookup');
+    return null;
+  }
+
+  // 1. Search by email first
+  const searchRes = await fetch(
+    `https://services.leadconnectorhq.com/contacts/?locationId=${agencyHqLocationId}&query=${encodeURIComponent(email)}&limit=1`,
+    { headers: { Authorization: `Bearer ${apiKey}`, Version: '2021-07-28' } }
+  );
+  if (searchRes.ok) {
+    const data     = await searchRes.json() as Record<string, unknown>;
+    const contacts = (data?.contacts as Record<string, unknown>[]) ?? [];
+    const existing = contacts.find(c => (c.email as string)?.toLowerCase() === email.toLowerCase());
+    if (existing?.id) {
+      console.log(`[provisioner] Agency HQ contact found: ${existing.id} for ${email}`);
+      return existing.id as string;
+    }
+  }
+
+  // 2. Create if not found
+  const createRes = await fetch('https://services.leadconnectorhq.com/contacts/', {
+    method:  'POST',
+    headers: {
+      Authorization:  `Bearer ${apiKey}`,
+      Version:        '2021-07-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      locationId:  agencyHqLocationId,
+      firstName:   businessName,
+      email,
+      companyName: businessName,
+      source:      'mytCreative Platform',
+      tags:        [],
+    }),
+  });
+
+  if (!createRes.ok) {
+    console.warn(`[provisioner] Agency HQ contact create failed ${createRes.status}: ${await createRes.text()}`);
+    return null;
+  }
+
+  const createData = await createRes.json() as Record<string, unknown>;
+  const contactId  = (createData?.contact as Record<string, unknown>)?.id as string
+    ?? createData?.id as string
+    ?? null;
+  console.log(`[provisioner] Agency HQ contact created: ${contactId} for ${email}`);
+  return contactId;
+}
+
+// ─── Step D3b: Write site URL + fire welcome tag ──────────────────────────────
 
 async function updateGHLContact(
   contactId: string,
@@ -375,7 +436,9 @@ async function updateGHLContact(
     }),
   });
   if (!res.ok) {
-    console.warn(`GHL contact update failed ${res.status}: ${await res.text()}`);
+    console.warn(`[provisioner] GHL contact update failed ${res.status}: ${await res.text()}`);
+  } else {
+    console.log(`[provisioner] Tagged digital-founda-active + injected site URL for contact ${contactId}`);
   }
 }
 
@@ -461,13 +524,25 @@ serve(async (req: Request) => {
     // ── Step D2: Create client_sites row (powers the React platform) ──────
     await upsertClientSite(email, locationId, deployment as PendingDeployment, allValues);
 
-    // ── Step D3: Update GHL contact with site URL + tag ───────────────────
-    const ghlApiKey = Deno.env.get('GHL_AGENCY_API_KEY');
+    // ── Step D3: Ensure agency CRM contact exists, inject site URL, fire tag ──
+    const ghlApiKey    = Deno.env.get('GHL_AGENCY_API_KEY');
     const businessName = (deployment.discovery_data as DiscoveryData).businessName || '';
-    const slug = generateSlug(businessName, locationId);
-    const siteUrl = `https://myt-client-platform.netlify.app/site/${slug}`;
-    if (contactId && ghlApiKey) {
-      await updateGHLContact(contactId, locationId, ghlApiKey, siteUrl);
+    const slug         = generateSlug(businessName, locationId);
+    const siteUrl      = `https://myt-client-platform.netlify.app/site/${slug}`;
+
+    if (ghlApiKey) {
+      // Use contactId passed from provision-client-workspace (VIP path) if
+      // available; otherwise search/create in Agency HQ (Stripe + manual paths).
+      let resolvedContactId = contactId;
+      if (!resolvedContactId) {
+        console.log(`[provisioner] No contactId in payload — resolving via Agency HQ for ${email}`);
+        resolvedContactId = await ensureAgencyHQContact(email, businessName, ghlApiKey);
+      }
+      if (resolvedContactId) {
+        await updateGHLContact(resolvedContactId, locationId, ghlApiKey, siteUrl);
+      } else {
+        console.warn(`[provisioner] Could not resolve agency contact for ${email} — tag skipped`);
+      }
     }
 
     // ── Step E: Trigger Netlify build ─────────────────────────────────────

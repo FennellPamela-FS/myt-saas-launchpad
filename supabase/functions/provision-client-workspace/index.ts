@@ -35,6 +35,7 @@ const COHORT_SEAT_LIMITS: Record<string, number> = {
 };
 
 const GHL_LOCATIONS_API = 'https://services.leadconnectorhq.com/locations/';
+const GHL_CONTACTS_API  = 'https://services.leadconnectorhq.com/contacts/';
 const GHL_API_VERSION   = '2021-07-28';
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
@@ -126,7 +127,10 @@ async function createGHLSubAccount(payload: RequestPayload): Promise<string> {
 
 function buildMinimalDiscoveryData(payload: RequestPayload) {
   return {
-    businessName:    payload.companyName.trim(),
+    businessName:     payload.companyName.trim(),
+    firstName:        payload.firstName.trim(),
+    lastName:         payload.lastName.trim(),
+    phone:            payload.phone.trim(),
     industryCategory: payload.industryCategory,
     vision:          `${payload.companyName} is committed to delivering exceptional value and building a strong digital presence.`,
     hookAndProblem:  `We help clients overcome the challenge of standing out in a competitive market by providing premium, personalized service.`,
@@ -134,6 +138,71 @@ function buildMinimalDiscoveryData(payload: RequestPayload) {
     uniqueValue:     `Our commitment to quality, reliability, and results-driven work sets us apart.`,
     theAsk:          `Book a free consultation or get in touch to learn how we can help you grow.`,
   };
+}
+
+// ─── Step 3b: Upsert contact in Agency HQ CRM ────────────────────────────────
+// Ensures the client exists as a contact in the master agency GHL account
+// (AGENCY_HQ_LOCATION_ID) so the welcome workflow can fire correctly.
+// Search first → create only if not found → return contactId either way.
+
+async function upsertAgencyHQContact(
+  payload: RequestPayload,
+  apiKey: string
+): Promise<string | null> {
+  const agencyHqLocationId = Deno.env.get('AGENCY_HQ_LOCATION_ID');
+  if (!agencyHqLocationId) {
+    console.warn('[provision-client-workspace] AGENCY_HQ_LOCATION_ID not set — skipping CRM upsert');
+    return null;
+  }
+
+  const email = payload.email.trim().toLowerCase();
+
+  // Search for existing contact by email
+  const searchRes = await fetch(
+    `${GHL_CONTACTS_API}?locationId=${agencyHqLocationId}&query=${encodeURIComponent(email)}&limit=1`,
+    { headers: { Authorization: `Bearer ${apiKey}`, Version: GHL_API_VERSION } }
+  );
+  if (searchRes.ok) {
+    const searchData = await searchRes.json() as Record<string, unknown>;
+    const contacts = (searchData?.contacts as Record<string, unknown>[]) ?? [];
+    const existing  = contacts.find(c => (c.email as string)?.toLowerCase() === email);
+    if (existing?.id) {
+      console.log(`[provision-client-workspace] Agency HQ contact found: ${existing.id}`);
+      return existing.id as string;
+    }
+  }
+
+  // Not found — create
+  const createRes = await fetch(GHL_CONTACTS_API, {
+    method:  'POST',
+    headers: {
+      Authorization:  `Bearer ${apiKey}`,
+      Version:        GHL_API_VERSION,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      locationId:  agencyHqLocationId,
+      firstName:   payload.firstName.trim(),
+      lastName:    payload.lastName.trim(),
+      email,
+      phone:       payload.phone.trim() || undefined,
+      companyName: payload.companyName.trim(),
+      source:      'mytCreative VIP Launchpad',
+      tags:        [],
+    }),
+  });
+
+  if (!createRes.ok) {
+    console.warn(`[provision-client-workspace] Agency HQ contact create failed ${createRes.status}: ${await createRes.text()}`);
+    return null;
+  }
+
+  const createData = await createRes.json() as Record<string, unknown>;
+  const contactId  = (createData?.contact as Record<string, unknown>)?.id as string
+    ?? createData?.id as string
+    ?? null;
+  console.log(`[provision-client-workspace] Agency HQ contact created: ${contactId}`);
+  return contactId;
 }
 
 async function upsertPendingDeployment(
@@ -161,8 +230,10 @@ async function upsertPendingDeployment(
 }
 
 // ─── Step 5: Fire provisioner (async, non-blocking) ───────────────────────────
+// contactId is passed so the provisioner can tag the correct Agency HQ contact
+// without having to do a second CRM lookup.
 
-function fireProvisioner(email: string, locationId: string): void {
+function fireProvisioner(email: string, locationId: string, contactId: string | null): void {
   const provisionerUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/ghl-saas-provisioner`;
   const serviceKey     = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
@@ -173,7 +244,7 @@ function fireProvisioner(email: string, locationId: string): void {
       Authorization:  `Bearer ${serviceKey}`,
     },
     body: JSON.stringify({
-      contact:  { email },
+      contact:  { email, id: contactId },
       location: { id: locationId },
     }),
   }).catch((err: Error) =>
@@ -219,11 +290,17 @@ serve(async (req: Request) => {
     // ── 3. Create GHL sub-account ────────────────────────────────────────────
     const locationId = await createGHLSubAccount(payload as RequestPayload);
 
+    // ── 3b. Upsert contact in Agency HQ CRM ──────────────────────────────────
+    // Creates (or finds) the client as a contact in the master agency account
+    // so the welcome workflow can tag and email them correctly.
+    const agencyApiKey = Deno.env.get('GHL_AGENCY_API_KEY') ?? '';
+    const contactId    = await upsertAgencyHQContact(payload as RequestPayload, agencyApiKey);
+
     // ── 4. Upsert Supabase record ─────────────────────────────────────────────
     await upsertPendingDeployment(payload as RequestPayload, locationId);
 
-    // ── 5. Fire provisioner (non-blocking) ───────────────────────────────────
-    fireProvisioner(payload.email!.trim().toLowerCase(), locationId);
+    // ── 5. Fire provisioner (non-blocking) — passes contactId so it can tag ──
+    fireProvisioner(payload.email!.trim().toLowerCase(), locationId, contactId);
 
     console.log(`VIP provisioning queued: cohort=${payload.cohort} email=${payload.email} location=${locationId}`);
 
