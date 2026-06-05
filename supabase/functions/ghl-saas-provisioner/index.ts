@@ -97,6 +97,11 @@ type GeneratedFields = {
   business_address: string;
   business_hours: string;
   contact_form_title: string;
+  // Social links (client-filled; AI returns empty strings)
+  social_instagram: string;
+  social_facebook: string;
+  social_twitter: string;
+  social_linkedin: string;
   // Innovative theme stat counters (3 key metrics about the business)
   stat_1_value: string;
   stat_1_label: string;
@@ -213,6 +218,11 @@ Return ONLY a valid JSON object (no markdown, no commentary) with exactly these 
   "business_address": "A realistic placeholder address for this type of business and industry region",
   "business_hours": "Typical business hours for this industry e.g. Mon-Fri: 9AM-6PM",
   "contact_form_title": "Contact section heading (max 6 words, e.g. 'Get Your Free Estimate')",
+
+  "social_instagram": "",
+  "social_facebook": "",
+  "social_twitter": "",
+  "social_linkedin": "",
 
   "stat_1_value": "A key impact metric for this business type (e.g. '500+' or '$2M+' or '10 Yrs')",
   "stat_1_label": "What stat_1_value represents — 2-4 words (e.g. 'Clients Served')",
