@@ -162,8 +162,10 @@ serve(async (req: Request) => {
     if (!payload.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email))
       return json({ error: 'Valid email required' }, 400);
 
-    const apiKey = Deno.env.get('GHL_AGENCY_API_KEY');
-    if (!apiKey) return json({ error: 'GHL_AGENCY_API_KEY not configured' }, 500);
+    // GHL_CONTACTS_API_KEY needs contacts.write + contacts.readonly scopes.
+    // Falls back to GHL_AGENCY_API_KEY if the dedicated key is not set.
+    const apiKey = Deno.env.get('GHL_CONTACTS_API_KEY') ?? Deno.env.get('GHL_AGENCY_API_KEY');
+    if (!apiKey) return json({ error: 'No GHL API key configured for contacts' }, 500);
 
     // ── 2. Look up location_id — active sites only ───────────────────────────
     console.log(`site-contact-form: looking up siteId=${payload.siteId}`);
