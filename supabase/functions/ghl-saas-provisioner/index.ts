@@ -97,6 +97,13 @@ type GeneratedFields = {
   business_address: string;
   business_hours: string;
   contact_form_title: string;
+  // Innovative theme stat counters (3 key metrics about the business)
+  stat_1_value: string;
+  stat_1_label: string;
+  stat_2_value: string;
+  stat_2_label: string;
+  stat_3_value: string;
+  stat_3_label: string;
 };
 
 
@@ -205,7 +212,14 @@ Return ONLY a valid JSON object (no markdown, no commentary) with exactly these 
   "business_phone": "A realistic placeholder phone number like (555) 123-4567",
   "business_address": "A realistic placeholder address for this type of business and industry region",
   "business_hours": "Typical business hours for this industry e.g. Mon-Fri: 9AM-6PM",
-  "contact_form_title": "Contact section heading (max 6 words, e.g. 'Get Your Free Estimate')"
+  "contact_form_title": "Contact section heading (max 6 words, e.g. 'Get Your Free Estimate')",
+
+  "stat_1_value": "A key impact metric for this business type (e.g. '500+' or '$2M+' or '10 Yrs')",
+  "stat_1_label": "What stat_1_value represents — 2-4 words (e.g. 'Clients Served')",
+  "stat_2_value": "A second key metric (number, dollar amount, or percentage)",
+  "stat_2_label": "What stat_2_value represents — 2-4 words (e.g. 'Projects Completed')",
+  "stat_3_value": "A third key metric meaningful to this industry",
+  "stat_3_label": "What stat_3_value represents — 2-4 words (e.g. 'Years Experience')"
 }`;
 }
 
