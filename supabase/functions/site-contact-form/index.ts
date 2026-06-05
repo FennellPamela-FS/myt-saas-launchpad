@@ -54,12 +54,15 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-// ─── Supabase (service role — read-only lookup, bypasses RLS) ─────────────────
-
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')              ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-);
+// Supabase client is created inside the handler (not at module level) so that
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are resolved at request time after
+// Supabase injects them into the Deno runtime environment.
+function getSupabase() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')              ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  );
+}
 
 // ─── GHL helpers ─────────────────────────────────────────────────────────────
 
@@ -164,6 +167,8 @@ serve(async (req: Request) => {
 
     // ── 2. Look up location_id — active sites only ───────────────────────────
     console.log(`site-contact-form: looking up siteId=${payload.siteId}`);
+    const supabase = getSupabase();
+    console.log(`site-contact-form: supabase client ready, querying...`);
     const { data: site, error: dbErr } = await supabase
       .from('client_sites_saas')
       .select('location_id')
