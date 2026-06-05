@@ -163,14 +163,19 @@ serve(async (req: Request) => {
     if (!apiKey) return json({ error: 'GHL_AGENCY_API_KEY not configured' }, 500);
 
     // ── 2. Look up location_id — active sites only ───────────────────────────
-    const { data: site } = await supabase
+    console.log(`site-contact-form: looking up siteId=${payload.siteId}`);
+    const { data: site, error: dbErr } = await supabase
       .from('client_sites_saas')
       .select('location_id')
       .eq('id', payload.siteId.trim())
       .eq('status', 'active')
       .maybeSingle();
 
+    if (dbErr) console.error('DB lookup error:', dbErr.message);
+
     const locationId = (site as Record<string, unknown> | null)?.location_id as string ?? null;
+
+    console.log(`site-contact-form: locationId=${locationId ?? 'NOT FOUND'}`);
 
     if (!locationId) {
       console.warn(`site-contact-form: no active site or location_id for siteId=${payload.siteId}`);
@@ -199,7 +204,8 @@ serve(async (req: Request) => {
     return json({ success: true, contactId });
 
   } catch (err) {
-    console.error('site-contact-form error:', err);
-    return json({ error: err instanceof Error ? err.message : 'Unexpected error' }, 500);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('site-contact-form UNHANDLED ERROR:', msg, err);
+    return json({ error: msg }, 500);
   }
 });
