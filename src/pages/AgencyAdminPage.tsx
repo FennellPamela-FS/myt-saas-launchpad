@@ -429,19 +429,30 @@ export default function AgencyAdminPage() {
     setDomainError('');
     const cleaned = cleanDomain(domainDraft);
 
-    const { error } = await supabase
-      .from('client_sites_saas')
-      .update({ custom_domain: cleaned || null })
-      .eq('id', siteId);
+    try {
+      const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-client-domain`;
+      const res   = await fetch(fnUrl, {
+        method:  'POST',
+        headers: {
+          'Content-Type':   'application/json',
+          'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET ?? '',
+        },
+        body: JSON.stringify({ siteId, domain: cleaned }),
+      });
 
-    if (error) {
-      setDomainError(error.message);
-    } else {
-      setSites(prev => prev.map(s =>
-        s.id === siteId ? { ...s, custom_domain: cleaned || null } : s
-      ));
-      setEditingDomainId(null);
+      const data = await res.json() as { error?: string };
+      if (!res.ok) {
+        setDomainError(data.error ?? 'Save failed');
+      } else {
+        setSites(prev => prev.map(s =>
+          s.id === siteId ? { ...s, custom_domain: cleaned || null } : s
+        ));
+        setEditingDomainId(null);
+      }
+    } catch (err) {
+      setDomainError(err instanceof Error ? err.message : 'Network error');
     }
+
     setDomainSaving(false);
   }
 
