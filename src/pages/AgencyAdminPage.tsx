@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle, UserPlus, Link2, Zap, Clock, Users } from 'lucide-react';
+import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle, UserPlus, Link2, Zap, Clock, Users, Mail } from 'lucide-react';
 
 type SiteRow = {
   id: string;
@@ -52,7 +52,6 @@ const CLIENT_PLATFORM_URL = (
 
 const GHL_ACCOUNTS_BASE = 'https://app.mytcreative.com/accounts/detail';
 
-const SESSION_KEY = 'agency_admin_email';
 
 function cleanDomain(raw: string): string {
   return raw.trim().replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
@@ -167,19 +166,58 @@ function ActionsCell({ row, onEditDomain }: { row: SiteRow; onEditDomain: () => 
 
 // ─── Auth Gate ───────────────────────────────────────────────────────────────
 
-function AuthGate({ onAuth }: { onAuth: (email: string) => void }) {
+function AuthGate() {
   const [emailInput, setEmailInput] = useState('');
   const [error, setError]           = useState('');
+  const [sending, setSending]       = useState(false);
+  const [sent, setSent]             = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const normalized = emailInput.trim().toLowerCase();
-    if (AGENCY_ADMINS.length === 0 || AGENCY_ADMINS.includes(normalized)) {
-      sessionStorage.setItem(SESSION_KEY, normalized);
-      onAuth(normalized);
-    } else {
-      setError('Access denied. This email is not on the authorized list.');
+
+    if (AGENCY_ADMINS.length > 0 && !AGENCY_ADMINS.includes(normalized)) {
+      setError('Access denied. This email is not authorized.');
+      return;
     }
+
+    setSending(true);
+    setError('');
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email: normalized,
+      options: { emailRedirectTo: `${window.location.origin}/agency-admin` },
+    });
+    setSending(false);
+
+    if (otpError) {
+      setError(otpError.message);
+    } else {
+      setSent(true);
+    }
+  }
+
+  if (sent) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-8">
+          <div className="flex flex-col items-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-full bg-gray-900 flex items-center justify-center">
+              <Mail className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-xl font-semibold text-gray-900">Check your email</h1>
+            <p className="text-sm text-gray-500 text-center">
+              We sent a sign-in link to <span className="font-medium text-gray-800">{emailInput}</span>. Click it to access the dashboard.
+            </p>
+          </div>
+          <button
+            onClick={() => { setSent(false); setError(''); }}
+            className="w-full py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Use a different email
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -190,7 +228,7 @@ function AuthGate({ onAuth }: { onAuth: (email: string) => void }) {
             <Shield className="w-6 h-6 text-white" />
           </div>
           <h1 className="text-xl font-semibold text-gray-900">Agency Command Center</h1>
-          <p className="text-sm text-gray-500 text-center">Enter your agency email to continue</p>
+          <p className="text-sm text-gray-500 text-center">Enter your agency email to receive a sign-in link</p>
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <input
@@ -205,9 +243,10 @@ function AuthGate({ onAuth }: { onAuth: (email: string) => void }) {
           {error && <p className="text-xs text-red-600">{error}</p>}
           <button
             type="submit"
-            className="w-full py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+            disabled={sending}
+            className="w-full py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
-            Access Dashboard
+            {sending ? 'Sending…' : 'Send Magic Link'}
           </button>
         </form>
       </div>
@@ -218,9 +257,8 @@ function AuthGate({ onAuth }: { onAuth: (email: string) => void }) {
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 
 export default function AgencyAdminPage() {
-  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(
-    () => sessionStorage.getItem(SESSION_KEY)
-  );
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
+  const [authLoading, setAuthLoading]     = useState(true);
   const [activeTab, setActiveTab] = useState<'sites' | 'queue' | 'cohorts' | 'runbook'>('sites');
   const [sites, setSites]           = useState<SiteRow[]>([]);
   const [loading, setLoading]       = useState(false);
@@ -404,6 +442,29 @@ export default function AgencyAdminPage() {
     setLoading(false);
   }
 
+  // Restore existing Supabase session and listen for magic link sign-in
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const email = session?.user?.email?.toLowerCase() ?? null;
+      if (email && (AGENCY_ADMINS.length === 0 || AGENCY_ADMINS.includes(email))) {
+        setVerifiedEmail(email);
+      }
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const email = session?.user?.email?.toLowerCase() ?? null;
+      if (email && (AGENCY_ADMINS.length === 0 || AGENCY_ADMINS.includes(email))) {
+        setVerifiedEmail(email);
+      } else {
+        if (email) supabase.auth.signOut();
+        setVerifiedEmail(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   useEffect(() => {
     if (verifiedEmail) { fetchSites(); fetchQueue(); fetchCohorts(); }
   }, [verifiedEmail]);
@@ -456,8 +517,10 @@ export default function AgencyAdminPage() {
     setDomainSaving(false);
   }
 
+  if (authLoading) return null;
+
   if (!verifiedEmail) {
-    return <AuthGate onAuth={setVerifiedEmail} />;
+    return <AuthGate />;
   }
 
   const liveCt    = sites.filter(s => s.status === 'active').length;
@@ -490,7 +553,7 @@ export default function AgencyAdminPage() {
                 </button>
               )}
               <button
-                onClick={() => { sessionStorage.removeItem(SESSION_KEY); setVerifiedEmail(null); }}
+                onClick={() => supabase.auth.signOut()}
                 className="text-xs text-gray-500 hover:text-gray-800 px-3 py-1.5 transition-colors whitespace-nowrap"
               >
                 Sign out
