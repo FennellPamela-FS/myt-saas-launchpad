@@ -162,18 +162,13 @@ serve(async (req: Request) => {
     if (!payload.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email))
       return json({ error: 'Valid email required' }, 400);
 
-    // GHL_CONTACTS_API_KEY needs contacts.write + contacts.readonly scopes.
-    // Falls back to GHL_AGENCY_API_KEY if the dedicated key is not set.
-    const apiKey = Deno.env.get('GHL_CONTACTS_API_KEY') ?? Deno.env.get('GHL_AGENCY_API_KEY');
-    if (!apiKey) return json({ error: 'No GHL API key configured for contacts' }, 500);
-
-    // ── 2. Look up location_id — active sites only ───────────────────────────
+    // ── 2. Look up location_id + per-client GHL key — active sites only ────────
     console.log(`site-contact-form: looking up siteId=${payload.siteId}`);
     const supabase = getSupabase();
     console.log(`site-contact-form: supabase client ready, querying...`);
     const { data: site, error: dbErr } = await supabase
       .from('client_sites_saas')
-      .select('location_id')
+      .select('location_id, ghl_location_key')
       .eq('id', payload.siteId.trim())
       .eq('status', 'active')
       .maybeSingle();
@@ -181,6 +176,14 @@ serve(async (req: Request) => {
     if (dbErr) console.error('DB lookup error:', dbErr.message);
 
     const locationId = (site as Record<string, unknown> | null)?.location_id as string ?? null;
+
+    // Per-client location key takes priority; falls back to global contacts key.
+    // GHL V2 contacts API requires a location-scoped PIT — agency tokens lack contacts scope.
+    const apiKey =
+      ((site as Record<string, unknown> | null)?.ghl_location_key as string | null) ??
+      Deno.env.get('GHL_CONTACTS_API_KEY') ??
+      Deno.env.get('GHL_AGENCY_API_KEY');
+    if (!apiKey) return json({ error: 'No GHL API key configured for contacts' }, 500);
 
     console.log(`site-contact-form: locationId=${locationId ?? 'NOT FOUND'}`);
 

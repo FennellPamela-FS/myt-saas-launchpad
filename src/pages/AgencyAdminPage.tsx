@@ -9,6 +9,7 @@ type SiteRow = {
   location_id: string;
   slug: string;
   custom_domain: string | null;
+  ghl_location_key: string | null;
   status: 'active' | 'inactive' | 'pending';
   created_at: string;
 };
@@ -426,12 +427,32 @@ export default function AgencyAdminPage() {
   const [domainError, setDomainError]         = useState('');
   const domainInputRef = useRef<HTMLInputElement>(null);
 
+  // Inline GHL location key editing
+  const [editingGhlKeyId, setEditingGhlKeyId] = useState<string | null>(null);
+  const [ghlKeyDraft, setGhlKeyDraft]         = useState('');
+  const [ghlKeySaving, setGhlKeySaving]       = useState(false);
+
+  async function saveGhlLocationKey(siteId: string) {
+    const cleaned = ghlKeyDraft.trim();
+    setGhlKeySaving(true);
+    await supabase
+      .from('client_sites_saas')
+      .update({ ghl_location_key: cleaned || null })
+      .eq('id', siteId);
+    setSites(prev => prev.map(s =>
+      s.id === siteId ? { ...s, ghl_location_key: cleaned || null } : s
+    ));
+    setGhlKeySaving(false);
+    setEditingGhlKeyId(null);
+    setGhlKeyDraft('');
+  }
+
   async function fetchSites() {
     setLoading(true);
     setFetchError('');
     const { data, error } = await supabase
       .from('client_sites_saas')
-      .select('id, email, business_name, location_id, slug, custom_domain, status, created_at')
+      .select('id, email, business_name, location_id, slug, custom_domain, ghl_location_key, status, created_at')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -610,7 +631,7 @@ export default function AgencyAdminPage() {
                       <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business</th>
                       <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden sm:table-cell">Email</th>
                       <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Location ID</th>
-                      <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell">Industry</th>
+                      <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Industry</th>
                       <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
                       <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Created</th>
                       <th className="px-4 md:px-6 py-3" />
@@ -730,7 +751,7 @@ export default function AgencyAdminPage() {
                               </button>
                             )}
                           </td>
-                          <td className="px-4 md:px-6 py-4 text-xs text-gray-500 hidden lg:table-cell">{row.industry_category}</td>
+                          <td className="px-4 md:px-6 py-4 text-xs text-gray-500 hidden md:table-cell">{row.industry_category}</td>
                           <td className="px-4 md:px-6 py-4">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                               row.status === 'pending'    ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
@@ -863,7 +884,7 @@ export default function AgencyAdminPage() {
                             <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Industry</th>
                             <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
                             <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Location ID</th>
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell">Claimed</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Claimed</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
@@ -892,7 +913,7 @@ export default function AgencyAdminPage() {
                                   ? <span title={row.location_id}>{row.location_id.slice(0, 12)}…</span>
                                   : <span className="text-gray-300">—</span>}
                               </td>
-                              <td className="px-5 py-3.5 text-xs text-gray-400 whitespace-nowrap hidden lg:table-cell">
+                              <td className="px-5 py-3.5 text-xs text-gray-400 whitespace-nowrap hidden md:table-cell">
                                 {new Date(row.created_at).toLocaleDateString()}
                               </td>
                             </tr>
@@ -1176,6 +1197,7 @@ export default function AgencyAdminPage() {
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Business</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Site URL</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Custom Domain</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">GHL Key</th>
                     <th className="text-left px-4 md:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
                     <th className="px-4 md:px-6 py-3" />
                   </tr>
@@ -1260,6 +1282,55 @@ export default function AgencyAdminPage() {
                                 onClick={() => startEditingDomain(site)}
                                 className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-400 hover:text-gray-700 transition-all"
                                 title="Edit domain"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* GHL Location Key — inline editable */}
+                        <td className="px-4 md:px-6 py-4 hidden md:table-cell min-w-[160px]">
+                          {editingGhlKeyId === site.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                autoFocus
+                                value={ghlKeyDraft}
+                                onChange={e => setGhlKeyDraft(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') saveGhlLocationKey(site.id);
+                                  if (e.key === 'Escape') { setEditingGhlKeyId(null); setGhlKeyDraft(''); }
+                                }}
+                                placeholder="pit-xxxxx…"
+                                className="w-36 px-2 py-1 text-xs border border-gray-300 rounded-md font-mono focus:outline-none focus:ring-1 focus:ring-gray-900"
+                              />
+                              <button
+                                onClick={() => saveGhlLocationKey(site.id)}
+                                disabled={ghlKeySaving}
+                                className="px-2 py-1 text-xs bg-gray-900 text-white rounded-md disabled:opacity-40 hover:bg-gray-700"
+                              >
+                                {ghlKeySaving ? '…' : 'Save'}
+                              </button>
+                              <button
+                                onClick={() => { setEditingGhlKeyId(null); setGhlKeyDraft(''); }}
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 group">
+                              {site.ghl_location_key ? (
+                                <span className="font-mono text-xs text-emerald-700" title={site.ghl_location_key}>
+                                  {site.ghl_location_key.slice(0, 14)}…
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                              <button
+                                onClick={() => { setEditingGhlKeyId(site.id); setGhlKeyDraft(site.ghl_location_key ?? ''); }}
+                                className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-400 hover:text-gray-700 transition-all"
+                                title="Set GHL location key"
                               >
                                 <Pencil className="w-3 h-3" />
                               </button>
