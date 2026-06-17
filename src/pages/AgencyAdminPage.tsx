@@ -276,6 +276,7 @@ export default function AgencyAdminPage() {
   const [editingLocEmail, setEditingLocEmail] = useState<string | null>(null);
   const [locIdDraft, setLocIdDraft]           = useState('');
   const [locIdSaving, setLocIdSaving]         = useState(false);
+  const [locIdError, setLocIdError]           = useState('');
 
   // Inline primary email editing
   const [editingEmailRow, setEditingEmailRow] = useState<string | null>(null);
@@ -331,12 +332,15 @@ export default function AgencyAdminPage() {
     const cleaned = locIdDraft.trim();
     if (!cleaned) return;
     setLocIdSaving(true);
+    setLocIdError('');
     const { error } = await supabase
       .from('pending_saas_deployments')
       .update({ location_id: cleaned })
       .eq('email', email);
     setLocIdSaving(false);
-    if (!error) {
+    if (error) {
+      setLocIdError(error.message);
+    } else {
       setEditingLocEmail(null);
       setLocIdDraft('');
       fetchQueue();
@@ -636,7 +640,7 @@ export default function AgencyAdminPage() {
             <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">
-                  {showCompleted ? 'All Deployments' : 'Pending &amp; Failed Deployments'}
+                  {showCompleted ? 'All Deployments' : 'Pending & Failed Deployments'}
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {showCompleted ? 'Full deployment history' : 'Rows that never completed provisioning — trigger manually if stuck'}
@@ -757,31 +761,34 @@ export default function AgencyAdminPage() {
                           </td>
                           <td className="px-4 md:px-6 py-4 hidden md:table-cell">
                             {editingLocEmail === row.email ? (
-                              <div className="flex items-center gap-1">
-                                <input
-                                  autoFocus
-                                  value={locIdDraft}
-                                  onChange={e => setLocIdDraft(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') saveQueueLocationId(row.email);
-                                    if (e.key === 'Escape') { setEditingLocEmail(null); setLocIdDraft(''); }
-                                  }}
-                                  placeholder="Paste location ID…"
-                                  className="w-44 px-2 py-1 text-xs border border-gray-300 rounded-md font-mono focus:outline-none focus:ring-1 focus:ring-gray-900"
-                                />
-                                <button
-                                  onClick={() => saveQueueLocationId(row.email)}
-                                  disabled={locIdSaving || !locIdDraft.trim()}
-                                  className="px-2 py-1 text-xs bg-gray-900 text-white rounded-md disabled:opacity-40 hover:bg-gray-700"
-                                >
-                                  {locIdSaving ? '…' : 'Save'}
-                                </button>
-                                <button
-                                  onClick={() => { setEditingLocEmail(null); setLocIdDraft(''); }}
-                                  className="px-2 py-1 text-xs text-gray-500 hover:text-gray-800"
-                                >
-                                  ✕
-                                </button>
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    autoFocus
+                                    value={locIdDraft}
+                                    onChange={e => { setLocIdDraft(e.target.value); setLocIdError(''); }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') saveQueueLocationId(row.email);
+                                      if (e.key === 'Escape') { setEditingLocEmail(null); setLocIdDraft(''); setLocIdError(''); }
+                                    }}
+                                    placeholder="Paste location ID…"
+                                    className="w-44 px-2 py-1 text-xs border border-gray-300 rounded-md font-mono focus:outline-none focus:ring-1 focus:ring-gray-900"
+                                  />
+                                  <button
+                                    onClick={() => saveQueueLocationId(row.email)}
+                                    disabled={locIdSaving || !locIdDraft.trim()}
+                                    className="px-2 py-1 text-xs bg-gray-900 text-white rounded-md disabled:opacity-40 hover:bg-gray-700"
+                                  >
+                                    {locIdSaving ? '…' : 'Save'}
+                                  </button>
+                                  <button
+                                    onClick={() => { setEditingLocEmail(null); setLocIdDraft(''); setLocIdError(''); }}
+                                    className="px-2 py-1 text-xs text-gray-500 hover:text-gray-800"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                                {locIdError && <p className="text-xs text-red-500">{locIdError}</p>}
                               </div>
                             ) : row.location_id ? (
                               <span className="font-mono text-xs text-gray-600">{row.location_id}</span>
