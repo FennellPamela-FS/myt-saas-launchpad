@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle, UserPlus, Link2, Zap, Clock, Users, Mail } from 'lucide-react';
+import { Copy, Check, ChevronDown, Shield, ExternalLink, RefreshCw, Pencil, Globe, X, BookOpen, Server, ArrowRight, AlertCircle, UserPlus, Link2, Zap, Clock, Users, Mail, Settings } from 'lucide-react';
 
 type SiteRow = {
   id: string;
@@ -260,7 +260,7 @@ function AuthGate() {
 export default function AgencyAdminPage() {
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
   const [authLoading, setAuthLoading]     = useState(true);
-  const [activeTab, setActiveTab] = useState<'sites' | 'queue' | 'cohorts' | 'runbook'>('sites');
+  const [activeTab, setActiveTab] = useState<'sites' | 'queue' | 'cohorts' | 'runbook' | 'platform'>('sites');
   const [sites, setSites]           = useState<SiteRow[]>([]);
   const [loading, setLoading]       = useState(false);
   const [fetchError, setFetchError] = useState('');
@@ -447,6 +447,28 @@ export default function AgencyAdminPage() {
     setGhlKeyDraft('');
   }
 
+  // Agency platform settings
+  type AgencySettings = { id: string; agency_name: string; agency_website_url: string; show_powered_by: boolean };
+  const [agencySettings, setAgencySettings] = useState<AgencySettings | null>(null);
+  const [agencyDraft, setAgencyDraft]       = useState<Partial<AgencySettings>>({});
+  const [agencySaving, setAgencySaving]     = useState(false);
+  const [agencySaved, setAgencySaved]       = useState(false);
+
+  async function fetchAgencySettings() {
+    const { data } = await supabase.from('agency_settings').select('*').maybeSingle();
+    if (data) { setAgencySettings(data as AgencySettings); setAgencyDraft(data as AgencySettings); }
+  }
+
+  async function saveAgencySettings() {
+    if (!agencySettings) return;
+    setAgencySaving(true);
+    await supabase.from('agency_settings').update(agencyDraft).eq('id', agencySettings.id);
+    setAgencySettings(prev => prev ? { ...prev, ...agencyDraft } : prev);
+    setAgencySaving(false);
+    setAgencySaved(true);
+    setTimeout(() => setAgencySaved(false), 2500);
+  }
+
   async function fetchSites() {
     setLoading(true);
     setFetchError('');
@@ -487,7 +509,7 @@ export default function AgencyAdminPage() {
   }, []);
 
   useEffect(() => {
-    if (verifiedEmail) { fetchSites(); fetchQueue(); fetchCohorts(); }
+    if (verifiedEmail) { fetchSites(); fetchQueue(); fetchCohorts(); fetchAgencySettings(); }
   }, [verifiedEmail]);
 
   useEffect(() => {
@@ -584,10 +606,11 @@ export default function AgencyAdminPage() {
           {/* Tab nav — scrollable on mobile */}
           <div className="flex gap-0.5 -mb-px overflow-x-auto scrollbar-none">
             {([
-              { id: 'sites',   label: 'Client Sites',       icon: Server   },
-              { id: 'queue',   label: 'Provisioning Queue',  icon: Clock    },
-              { id: 'cohorts', label: 'Cohorts',             icon: Users    },
-              { id: 'runbook', label: 'Domain Runbook',      icon: BookOpen },
+              { id: 'sites',    label: 'Client Sites',       icon: Server   },
+              { id: 'queue',    label: 'Provisioning Queue', icon: Clock    },
+              { id: 'cohorts',  label: 'Cohorts',            icon: Users    },
+              { id: 'runbook',  label: 'Domain Runbook',     icon: BookOpen },
+              { id: 'platform', label: 'Platform',           icon: Settings },
             ] as const).map(tab => (
               <button
                 key={tab.id}
@@ -1097,6 +1120,75 @@ export default function AgencyAdminPage() {
           </section>
 
         </div>
+        </div>
+      )}
+
+      {/* ── Platform tab ─────────────────────────────────────────────────── */}
+      {activeTab === 'platform' && (
+        <div className="max-w-2xl mx-auto px-4 md:px-6 py-8 md:py-12">
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900">Platform Settings</h2>
+            <p className="text-sm text-gray-500 mt-1">Controls global branding and attribution across all client sites.</p>
+          </div>
+
+          {!agencySettings ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+              {/* Agency name */}
+              <div className="px-6 py-5">
+                <label className="block text-sm font-medium text-gray-900 mb-1.5">Agency Name</label>
+                <p className="text-xs text-gray-500 mb-3">Appears in the "Powered by" line on all client sites.</p>
+                <input
+                  type="text"
+                  value={agencyDraft.agency_name ?? ''}
+                  onChange={e => setAgencyDraft(p => ({ ...p, agency_name: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="mytCreative"
+                />
+              </div>
+
+              {/* Agency website URL */}
+              <div className="px-6 py-5">
+                <label className="block text-sm font-medium text-gray-900 mb-1.5">Agency Website URL</label>
+                <p className="text-xs text-gray-500 mb-3">The "Powered by" line links to this URL.</p>
+                <input
+                  type="url"
+                  value={agencyDraft.agency_website_url ?? ''}
+                  onChange={e => setAgencyDraft(p => ({ ...p, agency_website_url: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-900 font-mono"
+                  placeholder="https://mytcreative.com"
+                />
+              </div>
+
+              {/* Show / hide powered by */}
+              <div className="px-6 py-5 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Show "Powered by" line</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Displays attribution in the footer of every client site.</p>
+                </div>
+                <button
+                  onClick={() => setAgencyDraft(p => ({ ...p, show_powered_by: !p.show_powered_by }))}
+                  className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 ${agencyDraft.show_powered_by ? 'bg-gray-900' : 'bg-gray-300'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${agencyDraft.show_powered_by ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* Save */}
+              <div className="px-6 py-4 bg-gray-50 rounded-b-xl flex justify-end">
+                <button
+                  onClick={saveAgencySettings}
+                  disabled={agencySaving}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                >
+                  {agencySaved ? <><Check className="w-4 h-4 text-green-400" /> Saved</> : agencySaving ? '…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
