@@ -269,6 +269,7 @@ export default function AgencyAdminPage() {
   const [queue, setQueue]           = useState<QueueRow[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueError, setQueueError] = useState('');
+  const [showCompleted, setShowCompleted] = useState(false);
   const [provisioning, setProvisioning] = useState<Record<string, 'running' | 'done' | 'error'>>({});
 
   // Inline location ID editing
@@ -368,7 +369,6 @@ export default function AgencyAdminPage() {
     const { data, error } = await supabase
       .from('pending_saas_deployments')
       .select('email, alt_email, location_id, status, industry_category, discovery_data, created_at, error_message')
-      .not('status', 'eq', 'completed')
       .order('created_at', { ascending: false });
 
     if (error) setQueueError(error.message);
@@ -633,19 +633,39 @@ export default function AgencyAdminPage() {
       {activeTab === 'queue' && (
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-4 md:px-6 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Pending &amp; Failed Deployments</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Rows that never completed provisioning — trigger manually if stuck</p>
+            <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  {showCompleted ? 'All Deployments' : 'Pending &amp; Failed Deployments'}
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {showCompleted ? 'Full deployment history' : 'Rows that never completed provisioning — trigger manually if stuck'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCompleted(v => !v)}
+                className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                  showCompleted
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700'
+                }`}
+              >
+                {showCompleted ? 'Hide completed' : 'Show completed'}
+              </button>
             </div>
 
-            {queueError ? (
+            {(() => {
+              const filteredQueue = showCompleted ? queue : queue.filter(r => r.status !== 'completed');
+              return queueError ? (
               <div className="p-6 text-sm text-red-600">{queueError}</div>
             ) : queueLoading ? (
               <div className="flex items-center justify-center p-16">
                 <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
               </div>
-            ) : queue.length === 0 ? (
-              <div className="p-12 text-center text-sm text-gray-400">No pending deployments.</div>
+            ) : filteredQueue.length === 0 ? (
+              <div className="p-12 text-center text-sm text-gray-400">
+                {showCompleted ? 'No deployments found.' : 'No pending deployments — all clients are provisioned.'}
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -661,7 +681,7 @@ export default function AgencyAdminPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {queue.map(row => {
+                    {filteredQueue.map(row => {
                       const state = provisioning[row.email];
                       const canProvision = !!row.location_id && row.status !== 'processing';
                       return (
@@ -816,7 +836,8 @@ export default function AgencyAdminPage() {
                   </tbody>
                 </table>
               </div>
-            )}
+            );
+            })()}
           </div>
         </div>
       )}
